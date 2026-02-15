@@ -11,13 +11,13 @@ API = f"https://api.telegram.org/bot{TOKEN}"
 ADMIN_ID = 5915034478
 
 COURIERS = {
-    589856755: {"name": "Ali"},
-    710708974: {"name": "Vali"},
+    589856755: {"name": "Hazratillo"},
+    710708974: {"name": "Javohir"},
     5915034478: {"name": "Bek"}
 }
 
 PRICE_PER_KG = 40000
-CARD_NUMBER = "8600 1234 5678 9012"
+CARD_NUMBER = "9860 0801 8165 2332"
 
 IS_OPEN = True
 users = {}
@@ -286,20 +286,33 @@ def webhook():
             send(chat_id,"Telefon yuboring yoki +998 yozing:",keyboard)
             return "ok"
 
-        if step=="phone":
-            if "contact" in message:
-                phone=message["contact"]["phone_number"]
-            else:
-                phone=text
+    if step == "phone":
 
-            if not phone.startswith("+998"):
-                send(chat_id,"❗ +998 bilan kiriting")
-                return "ok"
+    phone = None
 
-            users[chat_id]["phone"]=phone
-            users[chat_id]["step"]="kg"
-            send(chat_id,"Necha kg?")
-            return "ok"
+    # 1️⃣ Kontakt yuborilgan bo‘lsa
+    if "contact" in message:
+        phone = message["contact"]["phone_number"]
+
+        # + belgisini qo‘shamiz agar yo‘q bo‘lsa
+        if not phone.startswith("+"):
+            phone = "+" + phone
+
+    # 2️⃣ Oddiy yozib yuborilgan bo‘lsa
+    else:
+        phone = text.strip()
+
+    # 3️⃣ Tekshiruv
+    if not phone.startswith("+998") or len(phone) != 13:
+        send(chat_id,
+             "❗ Telefonni to‘g‘ri kiriting.\nNamuna: +998901234567")
+        return "ok"
+
+    users[chat_id]["phone"] = phone
+    users[chat_id]["step"] = "kg"
+
+    send(chat_id, "⚖️ Necha kg osh olasiz?")
+    return "ok"
 
         if step=="kg":
             try:
