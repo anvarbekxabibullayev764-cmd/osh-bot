@@ -5,8 +5,8 @@ import requests
 app = Flask(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = 123456789  # <-- o'zingizni yozing
-OSH_PRICE = 25000
+ADMIN_ID = 5915034478  # <-- o'zingizni yozing
+OSH_PRICE = 45000
 
 URL = f"https://api.telegram.org/bot{TOKEN}/"
 
