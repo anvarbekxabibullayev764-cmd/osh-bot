@@ -293,7 +293,7 @@ def webhook():
             users[chat_id] = {"step": "area"}
 
             keyboard = {
-                "keyboard": [["📍 Gulobod"],["📍 Sarhundon"]],
+                "keyboard": [["📍 Gulobod"],["📍 Sarxumdon"]],
                 "resize_keyboard": True
             }
 
