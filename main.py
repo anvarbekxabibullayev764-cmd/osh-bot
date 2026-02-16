@@ -206,7 +206,7 @@ def webhook():
                 }
 
                 send(orders[order_id]["client"],
-                     "⭐ Iltimos kuryerni baholang:",
+                     "⭐ Iltimos oshimizni va hizmatimizni  baholang:",
                      keyboard)
 
             # APPROVE CARD
