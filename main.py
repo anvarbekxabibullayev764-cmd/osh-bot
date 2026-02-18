@@ -3,10 +3,13 @@ from telebot import types
 import os
 from datetime import datetime
 
+# ================= CONFIG =================
 TOKEN = os.getenv("TOKEN")
-bot = telebot.TeleBot(TOKEN)
+if not TOKEN:
+    raise ValueError("TOKEN topilmadi!")
 
-# ================= ID LAR =================
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
+
 ADMIN_ID = 5915034478
 ADMIN_NAME = "ANVARBEK"
 
@@ -15,7 +18,10 @@ COURIERS = {
     710708974: "Hazratillo"
 }
 
-# ================= GLOBAL =================
+PRICE_PER_KG = 40000
+SALAT_PRICE = 5000
+
+# ================= GLOBAL STATE =================
 osh_active = True
 user_data = {}
 orders = {}
@@ -30,22 +36,26 @@ def start(message):
     if not osh_active:
         bot.send_message(message.chat.id, "❌ Hozir osh sotuvda emas.")
         return
-    bot.send_message(message.chat.id, "Necha kg osh? 1KG - 40 000 so'm")
+
+    bot.send_message(
+        message.chat.id,
+        "🍚 Necha kg osh?\n1 KG = 40 000 so'm"
+    )
 
 # ================= ADMIN PANEL =================
 @bot.message_handler(commands=['admin'])
 def admin_panel(message):
     if message.chat.id != ADMIN_ID:
         return
-    
-    avg = round(sum(ratings)/len(ratings),1) if ratings else 0
-    
+
+    avg = round(sum(ratings)/len(ratings), 1) if ratings else 0
+
     text = f"""
-👑 ADMIN PANEL ({ADMIN_NAME})
+👑 <b>ADMIN PANEL ({ADMIN_NAME})</b>
 
 🍚 Holat: {"🟢 Ochiq" if osh_active else "🔴 Yopiq"}
 📦 Jami zakaz: {total_orders}
-💰 Umumiy daromad: {total_income} so'm
+💰 Umumiy daromad: {total_income:,} so'm
 ⭐ O'rtacha reyting: {avg}
 
 Buyruqlar:
@@ -74,81 +84,94 @@ def stop_osh(message):
 # ================= STAT =================
 @bot.message_handler(commands=['stat'])
 def stat(message):
-    if message.chat.id == ADMIN_ID:
-        avg = round(sum(ratings)/len(ratings),1) if ratings else 0
-        bot.send_message(ADMIN_ID, f"""
-📊 STATISTIKA
+    if message.chat.id != ADMIN_ID:
+        return
+
+    avg = round(sum(ratings)/len(ratings), 1) if ratings else 0
+
+    bot.send_message(
+        ADMIN_ID,
+        f"""
+📊 <b>STATISTIKA</b>
 
 📦 Zakazlar: {total_orders}
-💰 Daromad: {total_income} so'm
-⭐ Reytinglar: {len(ratings)}
+💰 Daromad: {total_income:,} so'm
+⭐ Reytinglar soni: {len(ratings)}
 ⭐ O'rtacha: {avg}
-""")
+"""
+    )
 
 # ================= KG =================
-@bot.message_handler(func=lambda m: m.text.isdigit())
+@bot.message_handler(func=lambda m: m.text and m.text.isdigit())
 def get_kg(message):
     if not osh_active:
         return
 
-    user_data[message.chat.id] = {}
-    user_data[message.chat.id]['kg'] = float(message.text)
-    bot.send_message(message.chat.id, "Salat olasizmi? (Ha/Yo'q)")
+    user_data[message.chat.id] = {"kg": float(message.text)}
+    bot.send_message(message.chat.id, "🥗 Salat olasizmi? (Ha/Yo'q)")
 
 # ================= SALAT =================
-@bot.message_handler(func=lambda m: m.text.lower() in ["ha", "yo'q"])
+@bot.message_handler(func=lambda m: m.text and m.text.lower() in ["ha", "yo'q"])
 def get_salat(message):
-    user_data[message.chat.id]['salat'] = message.text
-    bot.send_message(message.chat.id, "To'lov turi? (Naqd/Karta)")
+    if message.chat.id not in user_data:
+        return
+
+    user_data[message.chat.id]["salat"] = message.text
+    bot.send_message(message.chat.id, "💳 To'lov turi? (Naqd/Karta)")
 
 # ================= PAYMENT =================
-@bot.message_handler(func=lambda m: m.text.lower() in ["naqd", "karta"])
+@bot.message_handler(func=lambda m: m.text and m.text.lower() in ["naqd", "karta"])
 def get_payment(message):
     global order_counter, total_orders, total_income
 
-    kg = user_data[message.chat.id]['kg']
-    salat = user_data[message.chat.id]['salat']
+    if message.chat.id not in user_data:
+        return
+
+    if "kg" not in user_data[message.chat.id] or "salat" not in user_data[message.chat.id]:
+        return
+
+    kg = user_data[message.chat.id]["kg"]
+    salat = user_data[message.chat.id]["salat"]
     payment = message.text
 
-    total = kg * 40000
+    total = kg * PRICE_PER_KG
     if salat.lower() == "ha":
-        total += 5000
+        total += SALAT_PRICE
 
     order_counter += 1
     total_orders += 1
     total_income += total
-
     order_id = order_counter
 
     orders[order_id] = {
-        "taken": False
+        "taken": False,
+        "courier": None
     }
 
     text = f"""
-🆕 BUYURTMA #{order_id}
+🆕 <b>BUYURTMA #{order_id}</b>
 
 👤 {message.from_user.first_name}
 🆔 {message.from_user.id}
-
 🍚 Kg: {kg}
 🥗 Salat: {salat}
 💳 To'lov: {payment}
-
-💰 Jami: {total} so'm
+💰 {total:,} so'm
 🕒 {datetime.now().strftime('%H:%M')}
 """
 
-    bot.send_message(message.chat.id,
-        f"Zakaz qabul qilindi ✅\n\nBuyurtma raqami: #{order_id}\nReyting bering (1-5) ⭐")
+    bot.send_message(
+        message.chat.id,
+        f"✅ Zakaz qabul qilindi!\nBuyurtma: #{order_id}\n\n⭐ Reyting bering (1-5)"
+    )
 
     bot.send_message(ADMIN_ID, text)
 
     markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton(
+    markup.add(types.InlineKeyboardButton(
         "✅ Qabul qilish",
         callback_data=f"take_{order_id}"
-    )
-    markup.add(btn)
+    ))
 
     for courier_id in COURIERS:
         bot.send_message(courier_id, text, reply_markup=markup)
@@ -156,34 +179,54 @@ def get_payment(message):
 # ================= COURIER TAKE =================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("take_"))
 def take_order(call):
-    order_id = int(call.data.split("_")[1])
+    try:
+        order_id = int(call.data.split("_")[1])
 
-    if call.from_user.id not in COURIERS:
-        return
+        if call.from_user.id not in COURIERS:
+            return
 
-    if orders[order_id]["taken"]:
-        bot.answer_callback_query(call.id, "❌ Bu zakaz allaqachon olingan")
-        return
+        if order_id not in orders:
+            return
 
-    orders[order_id]["taken"] = True
-    courier_name = COURIERS[call.from_user.id]
+        if orders[order_id]["taken"]:
+            bot.answer_callback_query(call.id, "❌ Bu zakaz olingan")
+            return
 
-    bot.edit_message_reply_markup(
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=None
-    )
+        orders[order_id]["taken"] = True
+        courier_name = COURIERS[call.from_user.id]
+        orders[order_id]["courier"] = courier_name
 
-    bot.send_message(call.message.chat.id,
-        f"🚴 Zakazni {courier_name} qabul qildi")
+        # Tugmani hamma kuriyerda o‘chirish
+        bot.edit_message_reply_markup(
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=None
+        )
 
-    bot.send_message(ADMIN_ID,
-        f"📦 #{order_id} zakazni {courier_name} oldi")
+        bot.send_message(
+            call.message.chat.id,
+            f"🚴 Zakazni {courier_name} qabul qildi"
+        )
+
+        bot.send_message(
+            ADMIN_ID,
+            f"📦 #{order_id} zakazni {courier_name} oldi"
+        )
+
+    except Exception as e:
+        print("Callback error:", e)
 
 # ================= RATING =================
-@bot.message_handler(func=lambda m: m.text in ["1","2","3","4","5"])
+@bot.message_handler(func=lambda m: m.text in ["1", "2", "3", "4", "5"])
 def rating(message):
     ratings.append(int(message.text))
-    bot.send_message(message.chat.id, "Rahmat ⭐ Bahoyingiz qabul qilindi!")
+    bot.send_message(message.chat.id, "⭐ Rahmat! Bahoyingiz qabul qilindi.")
 
-bot.infinity_polling()
+# ================= SAFE POLLING =================
+print("🚀 Bot ishga tushdi...")
+
+bot.infinity_polling(
+    skip_pending=True,
+    timeout=60,
+    long_polling_timeout=60
+)
