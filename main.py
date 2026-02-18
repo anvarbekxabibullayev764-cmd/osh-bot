@@ -22,9 +22,9 @@ from aiogram.filters import Command
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-OSHKG_PRICE = 85000      # 1 kg narxi
+OSHKG_PRICE = 40000      # 1 kg narxi
 SALAD_PRICE = 5000       # 1 dona salat
-CARD_NUMBER = "8600 1234 5678 9012"
+CARD_NUMBER = "9860 0801 8165 2332"
 
 if not TOKEN:
     raise ValueError("BOT_TOKEN topilmadi")
