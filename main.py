@@ -9,11 +9,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 5915014478
-COURIER_IDS = list(map(int, os.getenv("COURIER_IDS", "").split(",")))
+COURIER_IDS = list(map(int, os.getenv("COURIER_IDS", "").split(","))) if os.getenv("COURIER_IDS") else []
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+# DATABASE
 conn = sqlite3.connect("database.db")
 cursor = conn.cursor()
 
@@ -31,9 +32,7 @@ kg REAL,
 salad INTEGER,
 total INTEGER,
 payment TEXT,
-status TEXT,
-courier_id INTEGER,
-rated INTEGER DEFAULT 0
+status TEXT
 )
 """)
 conn.commit()
@@ -91,6 +90,7 @@ async def padez_handler(message: Message, state: FSMContext):
 async def phone_handler(message: Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text
     await state.update_data(phone=phone)
+
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Lokatsiya yuborish", request_location=True)]],
         resize_keyboard=True
@@ -102,12 +102,13 @@ async def phone_handler(message: Message, state: FSMContext):
 async def location_handler(message: Message, state: FSMContext):
     await state.update_data(lat=message.location.latitude,
                             lon=message.location.longitude)
-    await message.answer("Necha kg osh?")
+    await message.answer("Necha kg osh? 1KG-40 000")
     await state.set_state(OrderState.kg)
 
 @dp.message(OrderState.kg)
 async def kg_handler(message: Message, state: FSMContext):
     await state.update_data(kg=float(message.text))
+
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Ha")],
                   [KeyboardButton(text="Yo‘q")]],
@@ -120,6 +121,7 @@ async def kg_handler(message: Message, state: FSMContext):
 async def salad_handler(message: Message, state: FSMContext):
     salad = 1 if message.text.lower() == "ha" else 0
     await state.update_data(salad=salad)
+
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Naqd")],
                   [KeyboardButton(text="Karta")]],
@@ -132,6 +134,7 @@ async def salad_handler(message: Message, state: FSMContext):
 async def payment_handler(message: Message, state: FSMContext):
     await state.update_data(payment=message.text)
     data = await state.get_data()
+
     total = int(data["kg"] * PRICE_PER_KG + (SALAD_PRICE if data["salad"] else 0))
     await state.update_data(total=total)
 
@@ -139,10 +142,11 @@ async def payment_handler(message: Message, state: FSMContext):
         await message.answer(f"To‘lov uchun karta:\n{CARD_NUMBER}\n\nChekni yuboring:")
         await state.set_state(OrderState.check)
     else:
-        await confirm_order(message, state)
+        await show_confirm(message, state)
 
-async def confirm_order(message, state):
+async def show_confirm(message: Message, state: FSMContext):
     data = await state.get_data()
+
     text = f"""
 Zakazni tasdiqlaysizmi?
 
@@ -155,17 +159,48 @@ Salat: {"Ha" if data['salad'] else "Yo‘q"}
 To‘lov: {data['payment']}
 Jami: {data['total']} so‘m
 """
+
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Tasdiqlash")],
                   [KeyboardButton(text="Bekor qilish")]],
         resize_keyboard=True
     )
+
     await message.answer(text, reply_markup=kb)
     await state.set_state(OrderState.confirm)
+
+@dp.message(OrderState.confirm, F.text == "Tasdiqlash")
+async def final_confirm_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+
+    cursor.execute("""
+    INSERT INTO orders(user_id,area,dom,padez,phone,lat,lon,kg,salad,total,payment,status)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (
+        message.from_user.id,
+        data["area"], data["dom"], data["padez"],
+        data["phone"], data["lat"], data["lon"],
+        data["kg"], data["salad"],
+        data["total"], data["payment"],
+        "new"
+    ))
+    conn.commit()
+    order_id = cursor.lastrowid
+
+    await message.answer("Zakaz qabul qilindi ✅")
+    await bot.send_message(ADMIN_ID, f"🆕 Yangi zakaz #{order_id}\nJami: {data['total']} so‘m")
+
+    await state.clear()
+
+@dp.message(OrderState.confirm, F.text == "Bekor qilish")
+async def cancel_handler(message: Message, state: FSMContext):
+    await message.answer("Zakaz bekor qilindi ❌")
+    await state.clear()
 
 @dp.message(OrderState.check, F.photo)
 async def check_handler(message: Message, state: FSMContext):
     data = await state.get_data()
+
     cursor.execute("""
     INSERT INTO orders(user_id,area,dom,padez,phone,lat,lon,kg,salad,total,payment,status)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
@@ -178,49 +213,15 @@ async def check_handler(message: Message, state: FSMContext):
         "pending"
     ))
     conn.commit()
-    order_id = cursor.lastrowid
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"approve_{order_id}")],
-        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"reject_{order_id}")]
-    ])
 
     await bot.send_photo(
         ADMIN_ID,
         message.photo[-1].file_id,
-        caption=f"Chek keldi\nZakaz #{order_id}\nJami: {data['total']}",
-        reply_markup=kb
+        caption=f"💳 Chek keldi\nJami: {data['total']} so‘m"
     )
 
     await message.answer("Chek yuborildi. Tasdiq kutilmoqda.")
     await state.clear()
-
-@dp.callback_query(F.data.startswith("approve_"))
-async def approve_handler(call: CallbackQuery):
-    order_id = int(call.data.split("_")[1])
-    cursor.execute("UPDATE orders SET status='new' WHERE id=?", (order_id,))
-    conn.commit()
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚚 Qabul qilish", callback_data=f"take_{order_id}")]
-    ])
-
-    for courier in COURIER_IDS:
-        await bot.send_message(courier, f"🆕 Zakaz #{order_id}", reply_markup=kb)
-
-    await call.message.edit_caption("Tasdiqlandi va kuryerlarga yuborildi ✅")
-
-@dp.callback_query(F.data.startswith("reject_"))
-async def reject_handler(call: CallbackQuery):
-    order_id = int(call.data.split("_")[1])
-    cursor.execute("SELECT user_id FROM orders WHERE id=?", (order_id,))
-    user_id = cursor.fetchone()[0]
-
-    cursor.execute("UPDATE orders SET status='rejected' WHERE id=?", (order_id,))
-    conn.commit()
-
-    await bot.send_message(user_id, "To‘lov tasdiqlanmadi ❌")
-    await call.message.edit_caption("Bekor qilindi ❌")
 
 async def main():
     await dp.start_polling(bot)
