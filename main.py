@@ -1,241 +1,229 @@
+import asyncio
 import os
-import requests
-from flask import Flask, request
-from datetime import datetime
+import sqlite3
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import *
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.storage.memory import MemoryStorage
 
-app = Flask(__name__)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = 5915014478
+COURIER_IDS = list(map(int, os.getenv("COURIER_IDS", "").split(",")))
 
-TOKEN = os.environ.get("BOT_TOKEN")
-API = f"https://api.telegram.org/bot{TOKEN}"
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 
-ADMIN_ID = 5915034478
+conn = sqlite3.connect("database.db")
+cursor = conn.cursor()
 
-COURIERS = {
-    589856755: {"name": "Javohir"},
-    710708974: {"name": "Hazratillo"},
-    5915034478: {"name": "Bek"}
-}
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS orders(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+user_id INTEGER,
+area TEXT,
+dom TEXT,
+padez TEXT,
+phone TEXT,
+lat TEXT,
+lon TEXT,
+kg REAL,
+salad INTEGER,
+total INTEGER,
+payment TEXT,
+status TEXT,
+courier_id INTEGER,
+rated INTEGER DEFAULT 0
+)
+""")
+conn.commit()
 
-# ===== NARXLAR =====
 PRICE_PER_KG = 40000
-SALAT_PRICE = 5000
+SALAD_PRICE = 5000
 CARD_NUMBER = "9860 0801 8165 2332"
 
-IS_OPEN = True
-users = {}
-orders = {}
-courier_stats = {}
+class OrderState(StatesGroup):
+    area = State()
+    dom = State()
+    padez = State()
+    phone = State()
+    location = State()
+    kg = State()
+    salad = State()
+    payment = State()
+    confirm = State()
+    check = State()
 
-# ===== ORDER COUNTER =====
-COUNTER_FILE = "order_id.txt"
+# START
+@dp.message(F.text == "/start")
+async def start_handler(message: Message, state: FSMContext):
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="GULOBOD")],
+                  [KeyboardButton(text="SAYXUMDON")]],
+        resize_keyboard=True
+    )
+    await message.answer("Hududni tanlang:", reply_markup=kb)
+    await state.set_state(OrderState.area)
 
-def load_counter():
-    if os.path.exists(COUNTER_FILE):
-        with open(COUNTER_FILE, "r") as f:
-            return int(f.read())
-    return 1000
+@dp.message(OrderState.area)
+async def area_handler(message: Message, state: FSMContext):
+    await state.update_data(area=message.text)
+    await message.answer("Dom raqami:")
+    await state.set_state(OrderState.dom)
 
-def save_counter(value):
-    with open(COUNTER_FILE, "w") as f:
-        f.write(str(value))
+@dp.message(OrderState.dom)
+async def dom_handler(message: Message, state: FSMContext):
+    await state.update_data(dom=message.text)
+    await message.answer("Padez raqami:")
+    await state.set_state(OrderState.padez)
 
-order_counter = load_counter()
+@dp.message(OrderState.padez)
+async def padez_handler(message: Message, state: FSMContext):
+    await state.update_data(padez=message.text)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Telefon yuborish", request_contact=True)]],
+        resize_keyboard=True
+    )
+    await message.answer("Telefon yuboring:", reply_markup=kb)
+    await state.set_state(OrderState.phone)
 
-# ===== DAILY STATS =====
-daily_stats = {
-    "orders": 0,
-    "completed": 0,
-    "cancelled": 0,
-    "cash": 0,
-    "card": 0,
-    "kg": 0,
-    "revenue": 0
-}
+@dp.message(OrderState.phone)
+async def phone_handler(message: Message, state: FSMContext):
+    phone = message.contact.phone_number if message.contact else message.text
+    await state.update_data(phone=phone)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Lokatsiya yuborish", request_location=True)]],
+        resize_keyboard=True
+    )
+    await message.answer("Lokatsiya yuboring:", reply_markup=kb)
+    await state.set_state(OrderState.location)
 
-# ================= SEND =================
-def send(chat_id, text, keyboard=None, inline=None):
-    payload = {"chat_id": chat_id, "text": text}
-    if keyboard:
-        payload["reply_markup"] = keyboard
-    if inline:
-        payload["reply_markup"] = inline
-    requests.post(API + "/sendMessage", json=payload, timeout=10)
+@dp.message(OrderState.location)
+async def location_handler(message: Message, state: FSMContext):
+    await state.update_data(lat=message.location.latitude,
+                            lon=message.location.longitude)
+    await message.answer("Necha kg osh?")
+    await state.set_state(OrderState.kg)
 
-def send_photo(chat_id, file_id, caption=None, inline=None):
-    payload = {"chat_id": chat_id, "photo": file_id}
-    if caption:
-        payload["caption"] = caption
-    if inline:
-        payload["reply_markup"] = inline
-    requests.post(API + "/sendPhoto", json=payload, timeout=10)
+@dp.message(OrderState.kg)
+async def kg_handler(message: Message, state: FSMContext):
+    await state.update_data(kg=float(message.text))
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Ha")],
+                  [KeyboardButton(text="Yo‘q")]],
+        resize_keyboard=True
+    )
+    await message.answer("Salat olasizmi? (5000)", reply_markup=kb)
+    await state.set_state(OrderState.salad)
 
-# ================= ORDER CREATE =================
-def create_order(user_id):
-    global order_counter
-    order_counter += 1
-    save_counter(order_counter)
+@dp.message(OrderState.salad)
+async def salad_handler(message: Message, state: FSMContext):
+    salad = 1 if message.text.lower() == "ha" else 0
+    await state.update_data(salad=salad)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Naqd")],
+                  [KeyboardButton(text="Karta")]],
+        resize_keyboard=True
+    )
+    await message.answer("To‘lov turi:", reply_markup=kb)
+    await state.set_state(OrderState.payment)
 
-    data = users[user_id]
+@dp.message(OrderState.payment)
+async def payment_handler(message: Message, state: FSMContext):
+    await state.update_data(payment=message.text)
+    data = await state.get_data()
+    total = int(data["kg"] * PRICE_PER_KG + (SALAD_PRICE if data["salad"] else 0))
+    await state.update_data(total=total)
 
-    orders[order_counter] = {
-        "id": order_counter,
-        "client": user_id,
-        "data": data,
-        "status": "NEW",
-        "courier": None,
-        "created": datetime.now()
-    }
-
-    daily_stats["orders"] += 1
-    daily_stats["kg"] += data["kg"]
-    daily_stats["revenue"] += data["total"]
-
-    if data["payment"] == "💵 Naqd":
-        daily_stats["cash"] += data["total"]
+    if message.text == "Karta":
+        await message.answer(f"To‘lov uchun karta:\n{CARD_NUMBER}\n\nChekni yuboring:")
+        await state.set_state(OrderState.check)
     else:
-        daily_stats["card"] += data["total"]
+        await confirm_order(message, state)
 
-    return order_counter
-
-# ================= SEND TO COURIERS =================
-def send_to_couriers(order_id):
-    order = orders[order_id]
-    data = order["data"]
-
-    map_link = f"https://maps.google.com/?q={data['lat']},{data['lon']}"
-
+async def confirm_order(message, state):
+    data = await state.get_data()
     text = f"""
-🆕 Zakaz #{order_id}
+Zakazni tasdiqlaysizmi?
 
-📍 {data['area']}
-🏢 {data['house']}
-🚪 {data['padez']}
-📞 {data['phone']}
-
-🍛 {data['kg']} kg × {PRICE_PER_KG}
-🥗 Salat: {"Ha" if data["salat"] else "Yo‘q"}
-
-💰 {data['total']} so'm
-💳 {data['payment']}
-
-🗺 {map_link}
+Hudud: {data['area']}
+Dom: {data['dom']}
+Padez: {data['padez']}
+Tel: {data['phone']}
+Kg: {data['kg']}
+Salat: {"Ha" if data['salad'] else "Yo‘q"}
+To‘lov: {data['payment']}
+Jami: {data['total']} so‘m
 """
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Tasdiqlash")],
+                  [KeyboardButton(text="Bekor qilish")]],
+        resize_keyboard=True
+    )
+    await message.answer(text, reply_markup=kb)
+    await state.set_state(OrderState.confirm)
 
-    inline = {
-        "inline_keyboard": [[
-            {"text": "🚚 Qabul qilish",
-             "callback_data": f"take_{order_id}"}
-        ]]
-    }
+@dp.message(OrderState.check, F.photo)
+async def check_handler(message: Message, state: FSMContext):
+    data = await state.get_data()
+    cursor.execute("""
+    INSERT INTO orders(user_id,area,dom,padez,phone,lat,lon,kg,salad,total,payment,status)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (
+        message.from_user.id,
+        data["area"], data["dom"], data["padez"],
+        data["phone"], data["lat"], data["lon"],
+        data["kg"], data["salad"],
+        data["total"], data["payment"],
+        "pending"
+    ))
+    conn.commit()
+    order_id = cursor.lastrowid
 
-    order["courier_messages"] = []
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"approve_{order_id}")],
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data=f"reject_{order_id}")]
+    ])
 
-    for cid in COURIERS:
-        r = requests.post(API + "/sendMessage", json={
-            "chat_id": cid,
-            "text": text,
-            "reply_markup": inline
-        }, timeout=10)
+    await bot.send_photo(
+        ADMIN_ID,
+        message.photo[-1].file_id,
+        caption=f"Chek keldi\nZakaz #{order_id}\nJami: {data['total']}",
+        reply_markup=kb
+    )
 
-        msg_id = r.json()["result"]["message_id"]
-        order["courier_messages"].append((cid, msg_id))
+    await message.answer("Chek yuborildi. Tasdiq kutilmoqda.")
+    await state.clear()
 
-    send(order["client"], "✅ Buyurtmangiz qabul qilindi.")
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_handler(call: CallbackQuery):
+    order_id = int(call.data.split("_")[1])
+    cursor.execute("UPDATE orders SET status='new' WHERE id=?", (order_id,))
+    conn.commit()
 
-# ================= WEBHOOK =================
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    global IS_OPEN
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚚 Qabul qilish", callback_data=f"take_{order_id}")]
+    ])
 
-    try:
-        update = request.get_json()
+    for courier in COURIER_IDS:
+        await bot.send_message(courier, f"🆕 Zakaz #{order_id}", reply_markup=kb)
 
-        # ===== CALLBACK =====
-        if "callback_query" in update:
-            call = update["callback_query"]
-            data = call["data"]
-            user_id = call["from"]["id"]
+    await call.message.edit_caption("Tasdiqlandi va kuryerlarga yuborildi ✅")
 
-            if data.startswith("salat_"):
-                choice = data.split("_")[1]
-                users[user_id]["salat"] = True if choice == "yes" else False
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_handler(call: CallbackQuery):
+    order_id = int(call.data.split("_")[1])
+    cursor.execute("SELECT user_id FROM orders WHERE id=?", (order_id,))
+    user_id = cursor.fetchone()[0]
 
-                kg = users[user_id]["kg"]
-                osh_sum = kg * PRICE_PER_KG
-                salat_sum = SALAT_PRICE if users[user_id]["salat"] else 0
-                total = osh_sum + salat_sum
+    cursor.execute("UPDATE orders SET status='rejected' WHERE id=?", (order_id,))
+    conn.commit()
 
-                users[user_id]["total"] = total
-                users[user_id]["step"] = "payment"
+    await bot.send_message(user_id, "To‘lov tasdiqlanmadi ❌")
+    await call.message.edit_caption("Bekor qilindi ❌")
 
-                keyboard = {
-                    "keyboard":[["💵 Naqd"],["💳 Karta"]],
-                    "resize_keyboard":True
-                }
+async def main():
+    await dp.start_polling(bot)
 
-                send(user_id,
-                     f"🧾 Hisob:\n"
-                     f"Osh: {osh_sum}\n"
-                     f"Salat: {salat_sum}\n"
-                     f"Jami: {total} so'm\n\n"
-                     f"To‘lov turini tanlang:",
-                     keyboard)
-                return "ok"
-
-        # ===== MESSAGE =====
-        message = update.get("message", {})
-        chat_id = message.get("chat", {}).get("id")
-        text = message.get("text", "")
-
-        if text == "/start":
-            users[chat_id] = {"step": "kg"}
-            send(chat_id, "⚖️ Necha kg osh olasiz?")
-            return "ok"
-
-        if chat_id not in users:
-            return "ok"
-
-        step = users[chat_id]["step"]
-
-        if step == "kg":
-            try:
-                kg = float(text)
-                if kg <= 0:
-                    raise ValueError
-            except:
-                send(chat_id,"❗ To‘g‘ri son kiriting")
-                return "ok"
-
-            users[chat_id]["kg"] = kg
-            users[chat_id]["step"] = "salat"
-
-            inline = {
-                "inline_keyboard":[[
-                    {"text":"🥗 Ha","callback_data":"salat_yes"},
-                    {"text":"❌ Yo‘q","callback_data":"salat_no"}
-                ]]
-            }
-
-            send(chat_id,
-                 "🥗 Salat ham zakaz qilasizmi? (5 000 so‘m)",
-                 inline=inline)
-            return "ok"
-
-        if step == "payment":
-            users[chat_id]["payment"] = text
-            order_id = create_order(chat_id)
-
-            send_to_couriers(order_id)
-
-            users.pop(chat_id)
-            return "ok"
-
-        return "ok"
-
-    except Exception as e:
-        print("ERROR:", e)
-        return "ok"
-
-@app.route("/")
-def home():
-    return "DELIVERY SYSTEM WORKING 100%"
+if __name__ == "__main__":
+    asyncio.run(main())
