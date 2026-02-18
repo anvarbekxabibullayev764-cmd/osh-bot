@@ -1,230 +1,189 @@
-import asyncio
+import telebot
+from telebot import types
 import os
-import sqlite3
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import *
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.storage.memory import MemoryStorage
+from datetime import datetime
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 5915014478
-COURIER_IDS = list(map(int, os.getenv("COURIER_IDS", "").split(","))) if os.getenv("COURIER_IDS") else []
+TOKEN = os.getenv("TOKEN")
+bot = telebot.TeleBot(TOKEN)
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+# ================= ID LAR =================
+ADMIN_ID = 5915034478
+ADMIN_NAME = "ANVARBEK"
 
-# DATABASE
-conn = sqlite3.connect("database.db")
-cursor = conn.cursor()
+COURIERS = {
+    589856755: "Javohir",
+    710708974: "Hazratillo"
+}
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS orders(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-user_id INTEGER,
-area TEXT,
-dom TEXT,
-padez TEXT,
-phone TEXT,
-lat TEXT,
-lon TEXT,
-kg REAL,
-salad INTEGER,
-total INTEGER,
-payment TEXT,
-status TEXT
-)
+# ================= GLOBAL =================
+osh_active = True
+user_data = {}
+orders = {}
+order_counter = 0
+total_orders = 0
+total_income = 0
+ratings = []
+
+# ================= START =================
+@bot.message_handler(commands=['start'])
+def start(message):
+    if not osh_active:
+        bot.send_message(message.chat.id, "❌ Hozir osh sotuvda emas.")
+        return
+    bot.send_message(message.chat.id, "Necha kg osh? 1KG - 40 000 so'm")
+
+# ================= ADMIN PANEL =================
+@bot.message_handler(commands=['admin'])
+def admin_panel(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    
+    avg = round(sum(ratings)/len(ratings),1) if ratings else 0
+    
+    text = f"""
+👑 ADMIN PANEL ({ADMIN_NAME})
+
+🍚 Holat: {"🟢 Ochiq" if osh_active else "🔴 Yopiq"}
+📦 Jami zakaz: {total_orders}
+💰 Umumiy daromad: {total_income} so'm
+⭐ O'rtacha reyting: {avg}
+
+Buyruqlar:
+/start_osh
+/stop_osh
+/stat
+"""
+    bot.send_message(ADMIN_ID, text)
+
+# ================= START OSH =================
+@bot.message_handler(commands=['start_osh'])
+def start_osh(message):
+    global osh_active
+    if message.chat.id == ADMIN_ID:
+        osh_active = True
+        bot.send_message(ADMIN_ID, "🟢 Osh sotuvga ochildi")
+
+# ================= STOP OSH =================
+@bot.message_handler(commands=['stop_osh'])
+def stop_osh(message):
+    global osh_active
+    if message.chat.id == ADMIN_ID:
+        osh_active = False
+        bot.send_message(ADMIN_ID, "🔴 Osh yopildi")
+
+# ================= STAT =================
+@bot.message_handler(commands=['stat'])
+def stat(message):
+    if message.chat.id == ADMIN_ID:
+        avg = round(sum(ratings)/len(ratings),1) if ratings else 0
+        bot.send_message(ADMIN_ID, f"""
+📊 STATISTIKA
+
+📦 Zakazlar: {total_orders}
+💰 Daromad: {total_income} so'm
+⭐ Reytinglar: {len(ratings)}
+⭐ O'rtacha: {avg}
 """)
-conn.commit()
 
-PRICE_PER_KG = 40000
-SALAD_PRICE = 5000
-CARD_NUMBER = "9860 0801 8165 2332"
+# ================= KG =================
+@bot.message_handler(func=lambda m: m.text.isdigit())
+def get_kg(message):
+    if not osh_active:
+        return
 
-class OrderState(StatesGroup):
-    area = State()
-    dom = State()
-    padez = State()
-    phone = State()
-    location = State()
-    kg = State()
-    salad = State()
-    payment = State()
-    confirm = State()
-    check = State()
+    user_data[message.chat.id] = {}
+    user_data[message.chat.id]['kg'] = float(message.text)
+    bot.send_message(message.chat.id, "Salat olasizmi? (Ha/Yo'q)")
 
-# START
-@dp.message(F.text == "/start")
-async def start_handler(message: Message, state: FSMContext):
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="GULOBOD")],
-                  [KeyboardButton(text="SAYXUMDON")]],
-        resize_keyboard=True
-    )
-    await message.answer("Hududni tanlang:", reply_markup=kb)
-    await state.set_state(OrderState.area)
+# ================= SALAT =================
+@bot.message_handler(func=lambda m: m.text.lower() in ["ha", "yo'q"])
+def get_salat(message):
+    user_data[message.chat.id]['salat'] = message.text
+    bot.send_message(message.chat.id, "To'lov turi? (Naqd/Karta)")
 
-@dp.message(OrderState.area)
-async def area_handler(message: Message, state: FSMContext):
-    await state.update_data(area=message.text)
-    await message.answer("Dom raqami:")
-    await state.set_state(OrderState.dom)
+# ================= PAYMENT =================
+@bot.message_handler(func=lambda m: m.text.lower() in ["naqd", "karta"])
+def get_payment(message):
+    global order_counter, total_orders, total_income
 
-@dp.message(OrderState.dom)
-async def dom_handler(message: Message, state: FSMContext):
-    await state.update_data(dom=message.text)
-    await message.answer("Padez raqami:")
-    await state.set_state(OrderState.padez)
+    kg = user_data[message.chat.id]['kg']
+    salat = user_data[message.chat.id]['salat']
+    payment = message.text
 
-@dp.message(OrderState.padez)
-async def padez_handler(message: Message, state: FSMContext):
-    await state.update_data(padez=message.text)
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Telefon yuborish", request_contact=True)]],
-        resize_keyboard=True
-    )
-    await message.answer("Telefon yuboring:", reply_markup=kb)
-    await state.set_state(OrderState.phone)
+    total = kg * 40000
+    if salat.lower() == "ha":
+        total += 5000
 
-@dp.message(OrderState.phone)
-async def phone_handler(message: Message, state: FSMContext):
-    phone = message.contact.phone_number if message.contact else message.text
-    await state.update_data(phone=phone)
+    order_counter += 1
+    total_orders += 1
+    total_income += total
 
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Lokatsiya yuborish", request_location=True)]],
-        resize_keyboard=True
-    )
-    await message.answer("Lokatsiya yuboring:", reply_markup=kb)
-    await state.set_state(OrderState.location)
+    order_id = order_counter
 
-@dp.message(OrderState.location)
-async def location_handler(message: Message, state: FSMContext):
-    await state.update_data(lat=message.location.latitude,
-                            lon=message.location.longitude)
-    await message.answer("Necha kg osh? 1KG-40 000")
-    await state.set_state(OrderState.kg)
-
-@dp.message(OrderState.kg)
-async def kg_handler(message: Message, state: FSMContext):
-    await state.update_data(kg=float(message.text))
-
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Ha")],
-                  [KeyboardButton(text="Yo‘q")]],
-        resize_keyboard=True
-    )
-    await message.answer("Salat olasizmi? (5000)", reply_markup=kb)
-    await state.set_state(OrderState.salad)
-
-@dp.message(OrderState.salad)
-async def salad_handler(message: Message, state: FSMContext):
-    salad = 1 if message.text.lower() == "ha" else 0
-    await state.update_data(salad=salad)
-
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Naqd")],
-                  [KeyboardButton(text="Karta")]],
-        resize_keyboard=True
-    )
-    await message.answer("To‘lov turi:", reply_markup=kb)
-    await state.set_state(OrderState.payment)
-
-@dp.message(OrderState.payment)
-async def payment_handler(message: Message, state: FSMContext):
-    await state.update_data(payment=message.text)
-    data = await state.get_data()
-
-    total = int(data["kg"] * PRICE_PER_KG + (SALAD_PRICE if data["salad"] else 0))
-    await state.update_data(total=total)
-
-    if message.text == "Karta":
-        await message.answer(f"To‘lov uchun karta:\n{CARD_NUMBER}\n\nChekni yuboring:")
-        await state.set_state(OrderState.check)
-    else:
-        await show_confirm(message, state)
-
-async def show_confirm(message: Message, state: FSMContext):
-    data = await state.get_data()
+    orders[order_id] = {
+        "taken": False
+    }
 
     text = f"""
-Zakazni tasdiqlaysizmi?
+🆕 BUYURTMA #{order_id}
 
-Hudud: {data['area']}
-Dom: {data['dom']}
-Padez: {data['padez']}
-Tel: {data['phone']}
-Kg: {data['kg']}
-Salat: {"Ha" if data['salad'] else "Yo‘q"}
-To‘lov: {data['payment']}
-Jami: {data['total']} so‘m
+👤 {message.from_user.first_name}
+🆔 {message.from_user.id}
+
+🍚 Kg: {kg}
+🥗 Salat: {salat}
+💳 To'lov: {payment}
+
+💰 Jami: {total} so'm
+🕒 {datetime.now().strftime('%H:%M')}
 """
 
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Tasdiqlash")],
-                  [KeyboardButton(text="Bekor qilish")]],
-        resize_keyboard=True
+    bot.send_message(message.chat.id,
+        f"Zakaz qabul qilindi ✅\n\nBuyurtma raqami: #{order_id}\nReyting bering (1-5) ⭐")
+
+    bot.send_message(ADMIN_ID, text)
+
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton(
+        "✅ Qabul qilish",
+        callback_data=f"take_{order_id}"
+    )
+    markup.add(btn)
+
+    for courier_id in COURIERS:
+        bot.send_message(courier_id, text, reply_markup=markup)
+
+# ================= COURIER TAKE =================
+@bot.callback_query_handler(func=lambda call: call.data.startswith("take_"))
+def take_order(call):
+    order_id = int(call.data.split("_")[1])
+
+    if call.from_user.id not in COURIERS:
+        return
+
+    if orders[order_id]["taken"]:
+        bot.answer_callback_query(call.id, "❌ Bu zakaz allaqachon olingan")
+        return
+
+    orders[order_id]["taken"] = True
+    courier_name = COURIERS[call.from_user.id]
+
+    bot.edit_message_reply_markup(
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=None
     )
 
-    await message.answer(text, reply_markup=kb)
-    await state.set_state(OrderState.confirm)
+    bot.send_message(call.message.chat.id,
+        f"🚴 Zakazni {courier_name} qabul qildi")
 
-@dp.message(OrderState.confirm, F.text == "Tasdiqlash")
-async def final_confirm_handler(message: Message, state: FSMContext):
-    data = await state.get_data()
+    bot.send_message(ADMIN_ID,
+        f"📦 #{order_id} zakazni {courier_name} oldi")
 
-    cursor.execute("""
-    INSERT INTO orders(user_id,area,dom,padez,phone,lat,lon,kg,salad,total,payment,status)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
-        message.from_user.id,
-        data["area"], data["dom"], data["padez"],
-        data["phone"], data["lat"], data["lon"],
-        data["kg"], data["salad"],
-        data["total"], data["payment"],
-        "new"
-    ))
-    conn.commit()
-    order_id = cursor.lastrowid
+# ================= RATING =================
+@bot.message_handler(func=lambda m: m.text in ["1","2","3","4","5"])
+def rating(message):
+    ratings.append(int(message.text))
+    bot.send_message(message.chat.id, "Rahmat ⭐ Bahoyingiz qabul qilindi!")
 
-    await message.answer("Zakaz qabul qilindi ✅")
-    await bot.send_message(ADMIN_ID, f"🆕 Yangi zakaz #{order_id}\nJami: {data['total']} so‘m")
-
-    await state.clear()
-
-@dp.message(OrderState.confirm, F.text == "Bekor qilish")
-async def cancel_handler(message: Message, state: FSMContext):
-    await message.answer("Zakaz bekor qilindi ❌")
-    await state.clear()
-
-@dp.message(OrderState.check, F.photo)
-async def check_handler(message: Message, state: FSMContext):
-    data = await state.get_data()
-
-    cursor.execute("""
-    INSERT INTO orders(user_id,area,dom,padez,phone,lat,lon,kg,salad,total,payment,status)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (
-        message.from_user.id,
-        data["area"], data["dom"], data["padez"],
-        data["phone"], data["lat"], data["lon"],
-        data["kg"], data["salad"],
-        data["total"], data["payment"],
-        "pending"
-    ))
-    conn.commit()
-
-    await bot.send_photo(
-        ADMIN_ID,
-        message.photo[-1].file_id,
-        caption=f"💳 Chek keldi\nJami: {data['total']} so‘m"
-    )
-
-    await message.answer("Chek yuborildi. Tasdiq kutilmoqda.")
-    await state.clear()
-
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+bot.infinity_polling()
