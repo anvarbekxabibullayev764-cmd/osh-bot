@@ -146,8 +146,7 @@ async def region(message: Message, state: FSMContext):
 async def dom(message: Message, state: FSMContext):
     await state.update_data(dom=message.text)
     await state.set_state(OrderState.padez)
-    await message.answer("Padez raqami:
-    (Eslatma: Eshigigacha yetkaziladi):")
+    await message.answer("Padez raqami:\n(Eslatma: Eshigigacha yetkaziladi)")
 
 @dp.message(OrderState.padez)
 async def padez(message: Message, state: FSMContext):
