@@ -18,7 +18,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 COURIERS = {
     589856755: "Javohir",
-    710708974: "Hazratillo"
+    710708974: "Hazratillo",
     5915034478: "Anvarbek"
 }
 
