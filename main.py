@@ -1,17 +1,23 @@
-import telebot
-from telebot import types
+import asyncio
 import os
 from datetime import datetime
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import (
+    Message, CallbackQuery,
+    ReplyKeyboardMarkup, KeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton
+)
+from aiogram.filters import Command
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
 
-# ================= CONFIG =================
 TOKEN = os.getenv("TOKEN")
-if not TOKEN:
-    raise ValueError("TOKEN topilmadi!")
 
-bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
+bot = Bot(token=TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
 
 ADMIN_ID = 5915034478
-ADMIN_NAME = "ANVARBEK"
 
 COURIERS = {
     589856755: "Javohir",
@@ -21,212 +27,235 @@ COURIERS = {
 PRICE_PER_KG = 40000
 SALAT_PRICE = 5000
 
-# ================= GLOBAL STATE =================
-osh_active = True
-user_data = {}
 orders = {}
-order_counter = 0
-total_orders = 0
-total_income = 0
-ratings = []
+order_id_counter = 0
+
+
+# ================= STATES =================
+class OrderState(StatesGroup):
+    branch = State()
+    dom = State()
+    padez = State()
+    phone = State()
+    location = State()
+    kg = State()
+    salat = State()
+    payment = State()
+    confirm = State()
+    rate_food = State()
+    rate_service = State()
+
 
 # ================= START =================
-@bot.message_handler(commands=['start'])
-def start(message):
-    if not osh_active:
-        bot.send_message(message.chat.id, "❌ Hozir osh sotuvda emas.")
+@dp.message(Command("start"))
+async def start(message: Message, state: FSMContext):
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="GULOBOD")],
+            [KeyboardButton(text="SAYXUMDON")]
+        ],
+        resize_keyboard=True
+    )
+    await message.answer("Filialni tanlang:", reply_markup=kb)
+    await state.set_state(OrderState.branch)
+
+
+# ================= BRANCH =================
+@dp.message(OrderState.branch)
+async def branch(message: Message, state: FSMContext):
+    await state.update_data(branch=message.text)
+    await message.answer("Dom raqamingiz:")
+    await state.set_state(OrderState.dom)
+
+
+# ================= DOM =================
+@dp.message(OrderState.dom)
+async def dom(message: Message, state: FSMContext):
+    await state.update_data(dom=message.text)
+    await message.answer("Padez raqami:")
+    await state.set_state(OrderState.padez)
+
+
+# ================= PADEZ =================
+@dp.message(OrderState.padez)
+async def padez(message: Message, state: FSMContext):
+    await state.update_data(padez=message.text)
+
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Telefon yuborish", request_contact=True)]
+        ],
+        resize_keyboard=True
+    )
+    await message.answer("Telefon raqamingiz:", reply_markup=kb)
+    await state.set_state(OrderState.phone)
+
+
+# ================= PHONE =================
+@dp.message(OrderState.phone)
+async def phone(message: Message, state: FSMContext):
+    if message.contact:
+        phone = message.contact.phone_number
+    else:
+        phone = message.text
+
+    await state.update_data(phone=phone)
+
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Lokatsiya yuborish", request_location=True)]
+        ],
+        resize_keyboard=True
+    )
+    await message.answer("Lokatsiya yuboring:", reply_markup=kb)
+    await state.set_state(OrderState.location)
+
+
+# ================= LOCATION =================
+@dp.message(OrderState.location)
+async def location(message: Message, state: FSMContext):
+    if not message.location:
+        await message.answer("Iltimos lokatsiya yuboring.")
         return
 
-    bot.send_message(
-        message.chat.id,
-        "🍚 Necha kg osh?\n1 KG = 40 000 so'm"
+    await state.update_data(
+        latitude=message.location.latitude,
+        longitude=message.location.longitude
     )
 
-# ================= ADMIN PANEL =================
-@bot.message_handler(commands=['admin'])
-def admin_panel(message):
-    if message.chat.id != ADMIN_ID:
-        return
+    await message.answer("Necha kg osh olasiz?")
+    await state.set_state(OrderState.kg)
 
-    avg = round(sum(ratings)/len(ratings), 1) if ratings else 0
-
-    text = f"""
-👑 <b>ADMIN PANEL ({ADMIN_NAME})</b>
-
-🍚 Holat: {"🟢 Ochiq" if osh_active else "🔴 Yopiq"}
-📦 Jami zakaz: {total_orders}
-💰 Umumiy daromad: {total_income:,} so'm
-⭐ O'rtacha reyting: {avg}
-
-Buyruqlar:
-/start_osh
-/stop_osh
-/stat
-"""
-    bot.send_message(ADMIN_ID, text)
-
-# ================= START OSH =================
-@bot.message_handler(commands=['start_osh'])
-def start_osh(message):
-    global osh_active
-    if message.chat.id == ADMIN_ID:
-        osh_active = True
-        bot.send_message(ADMIN_ID, "🟢 Osh sotuvga ochildi")
-
-# ================= STOP OSH =================
-@bot.message_handler(commands=['stop_osh'])
-def stop_osh(message):
-    global osh_active
-    if message.chat.id == ADMIN_ID:
-        osh_active = False
-        bot.send_message(ADMIN_ID, "🔴 Osh yopildi")
-
-# ================= STAT =================
-@bot.message_handler(commands=['stat'])
-def stat(message):
-    if message.chat.id != ADMIN_ID:
-        return
-
-    avg = round(sum(ratings)/len(ratings), 1) if ratings else 0
-
-    bot.send_message(
-        ADMIN_ID,
-        f"""
-📊 <b>STATISTIKA</b>
-
-📦 Zakazlar: {total_orders}
-💰 Daromad: {total_income:,} so'm
-⭐ Reytinglar soni: {len(ratings)}
-⭐ O'rtacha: {avg}
-"""
-    )
 
 # ================= KG =================
-@bot.message_handler(func=lambda m: m.text and m.text.isdigit())
-def get_kg(message):
-    if not osh_active:
-        return
+@dp.message(OrderState.kg)
+async def kg(message: Message, state: FSMContext):
+    await state.update_data(kg=float(message.text))
+    await message.answer("Salat olasizmi? (Ha/Yo'q)")
+    await state.set_state(OrderState.salat)
 
-    user_data[message.chat.id] = {"kg": float(message.text)}
-    bot.send_message(message.chat.id, "🥗 Salat olasizmi? (Ha/Yo'q)")
 
 # ================= SALAT =================
-@bot.message_handler(func=lambda m: m.text and m.text.lower() in ["ha", "yo'q"])
-def get_salat(message):
-    if message.chat.id not in user_data:
-        return
+@dp.message(OrderState.salat)
+async def salat(message: Message, state: FSMContext):
+    await state.update_data(salat=message.text)
+    await message.answer("To'lov turi (Naqd/Karta)")
+    await state.set_state(OrderState.payment)
 
-    user_data[message.chat.id]["salat"] = message.text
-    bot.send_message(message.chat.id, "💳 To'lov turi? (Naqd/Karta)")
 
 # ================= PAYMENT =================
-@bot.message_handler(func=lambda m: m.text and m.text.lower() in ["naqd", "karta"])
-def get_payment(message):
-    global order_counter, total_orders, total_income
+@dp.message(OrderState.payment)
+async def payment(message: Message, state: FSMContext):
+    await state.update_data(payment=message.text)
 
-    if message.chat.id not in user_data:
-        return
-
-    if "kg" not in user_data[message.chat.id] or "salat" not in user_data[message.chat.id]:
-        return
-
-    kg = user_data[message.chat.id]["kg"]
-    salat = user_data[message.chat.id]["salat"]
-    payment = message.text
-
-    total = kg * PRICE_PER_KG
-    if salat.lower() == "ha":
+    data = await state.get_data()
+    total = float(data["kg"]) * PRICE_PER_KG
+    if data["salat"].lower() == "ha":
         total += SALAT_PRICE
 
-    order_counter += 1
-    total_orders += 1
-    total_income += total
-    order_id = order_counter
+    await state.update_data(total=total)
 
-    orders[order_id] = {
-        "taken": False,
-        "courier": None
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Tasdiqlash", callback_data="confirm")],
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel")]
+    ])
+
+    await message.answer(
+        f"Zakaz tasdiqlaysizmi?\n\nJami: {total:,} so'm",
+        reply_markup=kb
+    )
+    await state.set_state(OrderState.confirm)
+
+
+# ================= CONFIRM =================
+@dp.callback_query(F.data == "confirm")
+async def confirm(call: CallbackQuery, state: FSMContext):
+    global order_id_counter
+    order_id_counter += 1
+
+    data = await state.get_data()
+    orders[order_id_counter] = {
+        "data": data,
+        "courier": None,
+        "status": "new",
+        "client_id": call.from_user.id
     }
 
-    text = f"""
-🆕 <b>BUYURTMA #{order_id}</b>
+    text = f"🆕 Zakaz #{order_id_counter}\nKg: {data['kg']}\nJami: {data['total']:,}"
 
-👤 {message.from_user.first_name}
-🆔 {message.from_user.id}
-🍚 Kg: {kg}
-🥗 Salat: {salat}
-💳 To'lov: {payment}
-💰 {total:,} so'm
-🕒 {datetime.now().strftime('%H:%M')}
-"""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Qabul qilish", callback_data=f"take_{order_id_counter}")]
+    ])
 
-    bot.send_message(
-        message.chat.id,
-        f"✅ Zakaz qabul qilindi!\nBuyurtma: #{order_id}\n\n⭐ Reyting bering (1-5)"
+    for courier in COURIERS:
+        await bot.send_message(courier, text, reply_markup=kb)
+
+    await call.message.answer("Zakazingiz qabul qilindi ✅")
+    await state.clear()
+
+
+# ================= TAKE =================
+@dp.callback_query(F.data.startswith("take_"))
+async def take(call: CallbackQuery):
+    order_id = int(call.data.split("_")[1])
+
+    if orders[order_id]["courier"] is not None:
+        await call.answer("Bu zakaz olingan")
+        return
+
+    orders[order_id]["courier"] = call.from_user.id
+    orders[order_id]["status"] = "taken"
+
+    await call.message.edit_reply_markup(reply_markup=None)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Yetkazildi", callback_data=f"done_{order_id}")]
+    ])
+
+    await call.message.answer("Zakaz sizga biriktirildi", reply_markup=kb)
+
+
+# ================= DONE =================
+@dp.callback_query(F.data.startswith("done_"))
+async def done(call: CallbackQuery):
+    order_id = int(call.data.split("_")[1])
+    client_id = orders[order_id]["client_id"]
+
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="1"), KeyboardButton(text="2"),
+             KeyboardButton(text="3"), KeyboardButton(text="4"),
+             KeyboardButton(text="5")]
+        ],
+        resize_keyboard=True
     )
 
-    bot.send_message(ADMIN_ID, text)
+    await bot.send_message(client_id, "Oshni baholang (1-5)", reply_markup=kb)
+    await dp.fsm.storage.set_state(
+        bot=bot,
+        chat=client_id,
+        state=OrderState.rate_food
+    )
 
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(
-        "✅ Qabul qilish",
-        callback_data=f"take_{order_id}"
-    ))
 
-    for courier_id in COURIERS:
-        bot.send_message(courier_id, text, reply_markup=markup)
+# ================= RATE FOOD =================
+@dp.message(OrderState.rate_food)
+async def rate_food(message: Message, state: FSMContext):
+    await state.update_data(food_rate=message.text)
+    await message.answer("Xizmatni baholang (1-5)")
+    await state.set_state(OrderState.rate_service)
 
-# ================= COURIER TAKE =================
-@bot.callback_query_handler(func=lambda call: call.data.startswith("take_"))
-def take_order(call):
-    try:
-        order_id = int(call.data.split("_")[1])
 
-        if call.from_user.id not in COURIERS:
-            return
+# ================= RATE SERVICE =================
+@dp.message(OrderState.rate_service)
+async def rate_service(message: Message, state: FSMContext):
+    await message.answer("⭐ Baholaganingiz uchun rahmat!")
+    await state.clear()
 
-        if order_id not in orders:
-            return
 
-        if orders[order_id]["taken"]:
-            bot.answer_callback_query(call.id, "❌ Bu zakaz olingan")
-            return
+# ================= RUN =================
+async def main():
+    await dp.start_polling(bot)
 
-        orders[order_id]["taken"] = True
-        courier_name = COURIERS[call.from_user.id]
-        orders[order_id]["courier"] = courier_name
-
-        # Tugmani hamma kuriyerda o‘chirish
-        bot.edit_message_reply_markup(
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=None
-        )
-
-        bot.send_message(
-            call.message.chat.id,
-            f"🚴 Zakazni {courier_name} qabul qildi"
-        )
-
-        bot.send_message(
-            ADMIN_ID,
-            f"📦 #{order_id} zakazni {courier_name} oldi"
-        )
-
-    except Exception as e:
-        print("Callback error:", e)
-
-# ================= RATING =================
-@bot.message_handler(func=lambda m: m.text in ["1", "2", "3", "4", "5"])
-def rating(message):
-    ratings.append(int(message.text))
-    bot.send_message(message.chat.id, "⭐ Rahmat! Bahoyingiz qabul qilindi.")
-
-# ================= SAFE POLLING =================
-print("🚀 Bot ishga tushdi...")
-
-bot.infinity_polling(
-    skip_pending=True,
-    timeout=60,
-    long_polling_timeout=60
-)
+if __name__ == "__main__":
+    asyncio.run(main())
