@@ -19,6 +19,7 @@ dp = Dispatcher(storage=MemoryStorage())
 COURIERS = {
     589856755: "Javohir",
     710708974: "Hazratillo"
+    5915034478: "Anvarbek"
 }
 
 PRICE_PER_KG = 40000
@@ -53,7 +54,7 @@ async def start(message: Message, state: FSMContext):
         ],
         resize_keyboard=True
     )
-    await message.answer("Filialni tanlang:", reply_markup=kb)
+    await message.answer("Hududni tanlang:", reply_markup=kb)
     await state.set_state(OrderState.branch)
 
 
@@ -116,7 +117,7 @@ async def location(message: Message, state: FSMContext):
         longitude=message.location.longitude
     )
 
-    await message.answer("Necha kg osh olasiz?")
+    await message.answer("Necha kg osh olasiz? 1KG-40 000")
     await state.set_state(OrderState.kg)
 
 
