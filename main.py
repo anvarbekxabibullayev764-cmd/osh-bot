@@ -146,13 +146,14 @@ async def region(message: Message, state: FSMContext):
 async def dom(message: Message, state: FSMContext):
     await state.update_data(dom=message.text)
     await state.set_state(OrderState.padez)
-    await message.answer("Padez raqami (Eshigigacha yetkaziladi):")
+    await message.answer("Padez raqami:
+    (Eslatma: Eshigigacha yetkaziladi):")
 
 @dp.message(OrderState.padez)
 async def padez(message: Message, state: FSMContext):
     await state.update_data(padez=message.text)
     kb = ReplyKeyboardBuilder()
-    kb.add(KeyboardButton(text="📱 Raqam yuborish", request_contact=True))
+    kb.add(KeyboardButton(text="📱 Raqam yuborish+998", request_contact=True))
     await state.set_state(OrderState.phone)
     await message.answer("Telefon:", reply_markup=kb.as_markup(resize_keyboard=True))
 
@@ -176,7 +177,7 @@ async def location(message: Message, state: FSMContext):
 async def kg(message: Message, state: FSMContext):
     await state.update_data(kg=float(message.text))
     await state.set_state(OrderState.salad)
-    await message.answer(f"Salat? ({SALAD_PRICE}) Masalan: Ha 2 ta 1tasi 5 000")
+    await message.answer(f"Salat kerakmi? Nechta? ({SALAD_PRICE}) Masalan: Ha 2 ta. 1tasi 5 000")
 
 @dp.message(OrderState.salad)
 async def salad(message: Message, state: FSMContext):
