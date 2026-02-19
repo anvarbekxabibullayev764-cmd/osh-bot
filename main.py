@@ -146,7 +146,7 @@ async def region(message: Message, state: FSMContext):
 async def dom(message: Message, state: FSMContext):
     await state.update_data(dom=message.text)
     await state.set_state(OrderState.padez)
-    await message.answer("Padez raqami:\n(Eslatma: Eshigigacha yetkaziladi)")
+    await message.answer("Padez raqami:\n(Eslatma: PADEZ Eshigigacha yetkaziladi)")
 
 @dp.message(OrderState.padez)
 async def padez(message: Message, state: FSMContext):
@@ -176,7 +176,7 @@ async def location(message: Message, state: FSMContext):
 async def kg(message: Message, state: FSMContext):
     await state.update_data(kg=float(message.text))
     await state.set_state(OrderState.salad)
-    await message.answer(f"Salat kerakmi? Nechta? ({SALAD_PRICE}) Masalan: Ha 2 ta. 1tasi 5 000")
+    await message.answer(f"Salat kerakmi? Nechta? Masalan: Ha 2 ta. 1tasi 5 000")
 
 @dp.message(OrderState.salad)
 async def salad(message: Message, state: FSMContext):
