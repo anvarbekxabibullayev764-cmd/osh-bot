@@ -6,10 +6,7 @@ from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
-from aiogram.types import (
-    Message, CallbackQuery,
-    KeyboardButton
-)
+from aiogram.types import Message, CallbackQuery, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
@@ -63,7 +60,6 @@ name TEXT)""")
 
 cur.execute("INSERT OR IGNORE INTO settings(id,is_open) VALUES(1,1)")
 
-# ====== KURIYERLAR QO‘SHILGAN ======
 cur.execute("INSERT OR IGNORE INTO couriers(user_id,name) VALUES(589856755,'Javohir')")
 cur.execute("INSERT OR IGNORE INTO couriers(user_id,name) VALUES(710708974,'Hazratillo')")
 conn.commit()
@@ -80,11 +76,10 @@ class OrderState(StatesGroup):
     payment = State()
     receipt = State()
 
-# ================= HELPERS =================
+# ================= KEYBOARDS =================
 def main_menu():
     kb = ReplyKeyboardBuilder()
     kb.add(KeyboardButton(text="🛒 Buyurtma berish"))
-    kb.adjust(1)
     return kb.as_markup(resize_keyboard=True)
 
 def region_kb():
@@ -100,6 +95,13 @@ def payment_kb():
     kb.add(KeyboardButton(text="💵 Naqd"))
     kb.adjust(2)
     return kb.as_markup(resize_keyboard=True)
+
+def confirm_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="✅ Tasdiqlash", callback_data="confirm_yes")
+    kb.button(text="❌ Bekor", callback_data="confirm_no")
+    kb.adjust(2)
+    return kb.as_markup()
 
 def admin_confirm_kb(order_id):
     kb = InlineKeyboardBuilder()
@@ -146,63 +148,120 @@ async def region(message: Message, state: FSMContext):
 async def dom(message: Message, state: FSMContext):
     await state.update_data(dom=message.text)
     await state.set_state(OrderState.padez)
-    await message.answer("Padez raqami:\n(Eslatma: PADEZ Eshigigacha yetkaziladi)")
+    await message.answer("Padez raqami:")
 
 @dp.message(OrderState.padez)
 async def padez(message: Message, state: FSMContext):
     await state.update_data(padez=message.text)
+
     kb = ReplyKeyboardBuilder()
     kb.add(KeyboardButton(text="📱 Raqam yuborish+998", request_contact=True))
+
     await state.set_state(OrderState.phone)
     await message.answer("Telefon:", reply_markup=kb.as_markup(resize_keyboard=True))
 
 @dp.message(OrderState.phone)
 async def phone(message: Message, state: FSMContext):
+
     phone = message.contact.phone_number if message.contact else message.text
+
     await state.update_data(phone=phone)
+
     kb = ReplyKeyboardBuilder()
     kb.add(KeyboardButton(text="📍 Lokatsiya", request_location=True))
+
     await state.set_state(OrderState.location)
+
     await message.answer("Lokatsiya:", reply_markup=kb.as_markup(resize_keyboard=True))
 
 @dp.message(OrderState.location)
 async def location(message: Message, state: FSMContext):
+
     loc = f"{message.location.latitude},{message.location.longitude}"
+
     await state.update_data(location=loc)
+
     await state.set_state(OrderState.kg)
+
     await message.answer(f"Osh narxi {OSHKG_PRICE} so'm/kg\nNecha kg?")
 
 @dp.message(OrderState.kg)
 async def kg(message: Message, state: FSMContext):
+
     await state.update_data(kg=float(message.text))
+
     await state.set_state(OrderState.salad)
-    await message.answer(f"Salat kerakmi? Nechta? Masalan: Ha 2 ta. 1tasi 5 000")
+
+    await message.answer("Salat kerakmi? Masalan: Ha 2")
 
 @dp.message(OrderState.salad)
 async def salad(message: Message, state: FSMContext):
-    qty = 0
+
+    qty=0
+
     if "ha" in message.text.lower():
-        parts = message.text.split()
-        qty = int(parts[1]) if len(parts)>1 else 1
+        parts=message.text.split()
+        qty=int(parts[1]) if len(parts)>1 else 1
+
     await state.update_data(salad_qty=qty)
+
     await state.set_state(OrderState.payment)
-    await message.answer("To'lov:", reply_markup=payment_kb())
+
+    await message.answer("To'lov:",reply_markup=payment_kb())
 
 @dp.message(OrderState.payment)
 async def payment(message: Message, state: FSMContext):
-    data = await state.get_data()
-    total = int(data["kg"]*OSHKG_PRICE + data["salad_qty"]*SALAD_PRICE)
-    await state.update_data(total=total, payment=message.text)
 
-    if message.text == "💳 Karta":
+    data=await state.get_data()
+
+    total=int(data["kg"]*OSHKG_PRICE+data["salad_qty"]*SALAD_PRICE)
+
+    await state.update_data(total=total,payment=message.text)
+
+    text=f"""
+📦 Buyurtma:
+
+📍 {data['region']}
+🏢 {data['dom']} | {data['padez']}
+
+📦 {data['kg']} kg
+🥗 {data['salad_qty']}
+
+💰 Jami: {total} so'm
+
+Tasdiqlaysizmi?
+"""
+
+    await message.answer(text,reply_markup=confirm_kb())
+
+# ================= CONFIRM =================
+@dp.callback_query(F.data=="confirm_yes")
+async def confirm_yes(call:CallbackQuery,state:FSMContext):
+
+    data=await state.get_data()
+
+    if data["payment"]=="💳 Karta":
+
         await state.set_state(OrderState.receipt)
-        await message.answer(f"Karta: {CARD_NUMBER}\nChek rasm yuboring.")
+
+        await call.message.answer(
+        f"Karta: {CARD_NUMBER}\nChek rasm yuboring.")
+
         return
 
-    await create_order(message, state)
+    await create_order(call.message,state)
 
-async def create_order(message, state, receipt_file=None):
-    data = await state.get_data()
+@dp.callback_query(F.data=="confirm_no")
+async def confirm_no(call:CallbackQuery,state:FSMContext):
+
+    await state.clear()
+
+    await call.message.edit_text("❌ Buyurtma bekor qilindi")
+
+# ================= CREATE ORDER =================
+async def create_order(message,state,receipt_file=None):
+
+    data=await state.get_data()
 
     cur.execute("""INSERT INTO orders
     (user_id,username,region,dom,padez,phone,location,kg,salad_qty,total,payment_type,status,created_at)
@@ -213,93 +272,123 @@ async def create_order(message, state, receipt_file=None):
      data["phone"],data["location"],
      data["kg"],data["salad_qty"],
      data["total"],data["payment"],
-     "waiting_admin",datetime.now().isoformat()))
+     "waiting_admin",
+     datetime.now().isoformat()))
+
     conn.commit()
 
-    order_id = cur.lastrowid
+    order_id=cur.lastrowid
+
+    if data["payment"]=="💳 Karta":
+        pay_text="💳 Karta orqali to'langan"
+    else:
+        pay_text="💵 Naqd — Yetkazilganda to'lanadi"
 
     text=f"""🆕 Buyurtma #{order_id}
+
 👤 @{message.from_user.username}
+
 📍 {data['region']}
 🏢 {data['dom']} | {data['padez']}
+
 📞 {data['phone']}
+
 📦 {data['kg']}kg
 🥗 {data['salad_qty']}
-💰 {data['total']} so'm"""
+
+💰 {data['total']} so'm
+
+{pay_text}
+"""
 
     if receipt_file:
-        await bot.send_photo(ADMIN_ID, receipt_file, caption=text,
-                             reply_markup=admin_confirm_kb(order_id))
+
+        await bot.send_photo(
+        ADMIN_ID,
+        receipt_file,
+        caption=text,
+        reply_markup=admin_confirm_kb(order_id))
+
     else:
-        await bot.send_message(ADMIN_ID, text,
-                               reply_markup=admin_confirm_kb(order_id))
+
+        await bot.send_message(
+        ADMIN_ID,
+        text,
+        reply_markup=admin_confirm_kb(order_id))
 
     await message.answer("⏳ Admin tasdiqlashi kutilmoqda.")
+
     await state.clear()
 
-@dp.message(OrderState.receipt, F.photo)
-async def receipt(message: Message, state: FSMContext):
-    await create_order(message, state, message.photo[-1].file_id)
+@dp.message(OrderState.receipt,F.photo)
+async def receipt(message:Message,state:FSMContext):
+
+    await create_order(message,state,message.photo[-1].file_id)
 
 # ================= ADMIN TASDIQ =================
 @dp.callback_query(F.data.startswith("ok_"))
-async def approve(call: CallbackQuery):
+async def approve(call:CallbackQuery):
+
     order_id=int(call.data.split("_")[1])
+
     cur.execute("UPDATE orders SET status='approved' WHERE id=?",(order_id,))
     conn.commit()
 
-    cur.execute("SELECT user_id,total FROM orders WHERE id=?",(order_id,))
-    user_id,total=cur.fetchone()
+    cur.execute("""SELECT user_id,total,region,dom,padez,
+    phone,location,kg,salad_qty,payment_type
+    FROM orders WHERE id=?""",(order_id,))
 
-    await bot.send_message(user_id,f"✅ Buyurtmangiz tasdiqlandi!\n💰 {total} so'm")
+    row=cur.fetchone()
+
+    user_id=row[0]
+    total=row[1]
+
+    region=row[2]
+    dom=row[3]
+    padez=row[4]
+    phone=row[5]
+    location=row[6]
+    kg=row[7]
+    salad=row[8]
+    payment=row[9]
+
+    if payment=="💳 Karta":
+        pay_text="💳 To'langan"
+    else:
+        pay_text="💵 Naqd olasiz"
+
+    lat,lon=location.split(",")
+
+    await bot.send_message(
+    user_id,
+    f"✅ Buyurtmangiz tasdiqlandi!\n💰 {total} so'm")
 
     cur.execute("SELECT user_id FROM couriers")
+
     for c in cur.fetchall():
-        await bot.send_message(c[0],f"🚚 Buyurtma #{order_id}",
-                               reply_markup=courier_kb(order_id))
+
+        await bot.send_message(
+        c[0],
+
+f"""🚚 Buyurtma #{order_id}
+
+📍 {region}
+🏢 {dom} | {padez}
+
+📞 {phone}
+
+📦 {kg} kg
+🥗 {salad}
+
+{pay_text}
+
+📍 Lokatsiya:
+https://maps.google.com/?q={lat},{lon}
+""",
+
+reply_markup=courier_kb(order_id))
 
     await call.message.edit_caption("✅ Tasdiqlandi")
-
-@dp.callback_query(F.data.startswith("take_"))
-async def take(call: CallbackQuery):
-    order_id=int(call.data.split("_")[1])
-    cur.execute("UPDATE orders SET courier_id=?,status='onway' WHERE id=?",
-                (call.from_user.id,order_id))
-    conn.commit()
-
-    await call.message.edit_text("Siz qabul qildingiz",
-                                 reply_markup=delivered_kb(order_id))
-    await bot.send_message(ADMIN_ID,f"🚴 {call.from_user.id} #{order_id} oldi")
-
-@dp.callback_query(F.data.startswith("done_"))
-async def done(call: CallbackQuery):
-    order_id=int(call.data.split("_")[1])
-    cur.execute("UPDATE orders SET status='delivered' WHERE id=?",(order_id,))
-    conn.commit()
-
-    cur.execute("SELECT user_id FROM orders WHERE id=?",(order_id,))
-    user_id=cur.fetchone()[0]
-
-    await bot.send_message(user_id,"Buyurtmani baholang:",
-                           reply_markup=rating_kb(order_id))
-
-@dp.callback_query(F.data.startswith("rate_"))
-async def rate(call: CallbackQuery):
-    _,order_id,r=call.data.split("_")
-    cur.execute("UPDATE orders SET rating=? WHERE id=?",(int(r),int(order_id)))
-    conn.commit()
-    await call.message.edit_text("Rahmat baholaganingiz uchun ⭐")
-    await bot.send_message(ADMIN_ID,f"⭐ Buyurtma #{order_id} baho: {r}")
-
-# ================= ADMIN COMMANDS =================
-@dp.message(Command("stop"))
-async def stop(message: Message):
-    if message.from_user.id!=ADMIN_ID: return
-    cur.execute("UPDATE settings SET is_open=0 WHERE id=1")
-    conn.commit()
-    cur.execute("SELECT COUNT(*),AVG(rating) FROM orders")
-    total,avg=cur.fetchone()
-    await message.answer(f"Stop\nSotildi: {total}\nO'rtacha: {avg}")
 
 # ================= RUN =================
 async def main():
