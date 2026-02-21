@@ -17,15 +17,14 @@ TOKEN=os.getenv("BOT_TOKEN")
 
 ADMIN_ID=5915034478
 
-COURIERS=[
-589856755,
-5915034478,
-710708974
-]
+COURIERS=[589856755,5915034478,710708974]
 
 OSHKG_PRICE=45000
 SALAD_PRICE=5000
 CARD_NUMBER="9860 0801 8165 2332"
+
+OSH_OPEN=True
+ORDER_ID=1
 
 logging.basicConfig(level=logging.INFO)
 
@@ -34,30 +33,6 @@ dp=Dispatcher(storage=MemoryStorage())
 
 conn=sqlite3.connect("bot.db")
 cur=conn.cursor()
-
-cur.execute("""
-CREATE TABLE IF NOT EXISTS orders(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-user_id INTEGER,
-username TEXT,
-region TEXT,
-dom TEXT,
-padez TEXT,
-phone TEXT,
-location TEXT,
-kg REAL,
-salad_qty INTEGER,
-total INTEGER,
-payment TEXT,
-pay_status TEXT,
-status TEXT,
-courier TEXT,
-rating INTEGER,
-created TEXT)
-""")
-
-conn.commit()
-
 
 class OrderState(StatesGroup):
  region=State()
@@ -71,12 +46,23 @@ class OrderState(StatesGroup):
  receipt=State()
 
 
+
 # MENYU
 
 def main_menu():
  kb=ReplyKeyboardBuilder()
  kb.add(KeyboardButton(text="🛒 Buyurtma berish"))
  return kb.as_markup(resize_keyboard=True)
+
+
+
+def admin_menu():
+ kb=ReplyKeyboardBuilder()
+ kb.add(KeyboardButton(text="🟢 START"))
+ kb.add(KeyboardButton(text="🔴 STOP"))
+ kb.adjust(2)
+ return kb.as_markup(resize_keyboard=True)
+
 
 
 def region_kb():
@@ -87,12 +73,14 @@ def region_kb():
  return kb.as_markup()
 
 
+
 def payment_kb():
  kb=ReplyKeyboardBuilder()
  kb.add(KeyboardButton(text="💳 Karta"))
  kb.add(KeyboardButton(text="💵 Naqd"))
  kb.adjust(2)
  return kb.as_markup()
+
 
 
 def admin_confirm_kb(id):
@@ -102,10 +90,12 @@ def admin_confirm_kb(id):
  return kb.as_markup()
 
 
+
 def courier_kb(id):
  kb=InlineKeyboardBuilder()
  kb.button(text="🚚 Qabul qilish",callback_data=f"take_{id}")
  return kb.as_markup()
+
 
 
 def done_kb(id):
@@ -115,16 +105,27 @@ def done_kb(id):
 
 
 
+def client_confirm_kb(id):
+ kb=InlineKeyboardBuilder()
+ kb.button(text="✅ Oldim",callback_data=f"oldim_{id}")
+ return kb.as_markup()
+
+
+
 # START
 
 @dp.message(Command("start"))
 async def start(m:Message):
 
+ if m.from_user.id==ADMIN_ID:
+  await m.answer("Admin panel",reply_markup=admin_menu())
+  return
+
  text="""
 🍽 Gulobod osh bot
 
-⚖ 1 kg osh = 45000 so'm
-🥗 Salat = 5000 so'm
+⚖ 1 kg osh = 45000
+🥗 Salat = 5000
 
 🚚 Yetkazish bepul
 """
@@ -133,10 +134,33 @@ async def start(m:Message):
 
 
 
+# ADMIN START STOP
+
+@dp.message(F.text=="🟢 START")
+async def start_osh(m:Message):
+ global OSH_OPEN
+ if m.from_user.id==ADMIN_ID:
+  OSH_OPEN=True
+  await m.answer("🟢 Osh ochildi")
+
+
+@dp.message(F.text=="🔴 STOP")
+async def stop_osh(m:Message):
+ global OSH_OPEN
+ if m.from_user.id==ADMIN_ID:
+  OSH_OPEN=False
+  await m.answer("🔴 Osh yopildi")
+
+
+
 # BUYURTMA
 
 @dp.message(F.text=="🛒 Buyurtma berish")
 async def order(m:Message,state:FSMContext):
+
+ if not OSH_OPEN:
+  await m.answer("❌ Osh yopiq")
+  return
 
  await state.set_state(OrderState.region)
 
@@ -205,11 +229,7 @@ async def location(m:Message,state:FSMContext):
 
  await state.set_state(OrderState.kg)
 
- await m.answer(
- f"""⚖ Necha kg osh kerak?
-
-1 kg = {OSHKG_PRICE} so'm"""
- )
+ await m.answer(f"⚖ Necha kg?\n1 kg = {OSHKG_PRICE}")
 
 
 
@@ -220,15 +240,7 @@ async def kg(m:Message,state:FSMContext):
 
  await state.set_state(OrderState.salad)
 
- await m.answer(
- f"""🥗 Salat nechta?
-
-1 ta = {SALAD_PRICE} so'm
-
-Masalan:
-Ha 2
-Yo'q"""
- )
+ await m.answer(f"🥗 Salat nechta?\n1 ta = {SALAD_PRICE}\nHa 2 yoki Yo'q")
 
 
 
@@ -251,6 +263,8 @@ async def salad(m:Message,state:FSMContext):
 @dp.message(OrderState.payment)
 async def payment(m:Message,state:FSMContext):
 
+ global ORDER_ID
+
  data=await state.get_data()
 
  osh=int(data["kg"]*OSHKG_PRICE)
@@ -258,26 +272,24 @@ async def payment(m:Message,state:FSMContext):
 
  total=osh+salat
 
- await state.update_data(total=total,payment=m.text)
+ await state.update_data(total=total,payment=m.text,id=ORDER_ID)
 
  text=f"""
-📦 Buyurtma
+📦 Buyurtma №{ORDER_ID}
 
 📍 {data['region']}
+🏢 Dom:{data['dom']}
+🚪 Padez:{data['padez']}
 
-🏢 Dom: {data['dom']}
-🚪 Padez: {data['padez']}
+⚖ {data['kg']}kg
+🥗 {data['salad_qty']}ta
 
-⚖ Osh:
-{data['kg']} kg × {OSHKG_PRICE} = {osh}
-
-🥗 Salat:
-{data['salad_qty']} × {SALAD_PRICE} = {salat}
-
-💰 Jami: {total}
+💰 {total}
 
 Tasdiqlaysizmi?
 """
+
+ ORDER_ID+=1
 
  kb=InlineKeyboardBuilder()
  kb.button(text="✅ Tasdiqlash",callback_data="yes")
@@ -292,7 +304,7 @@ Tasdiqlaysizmi?
 @dp.callback_query(F.data=="yes")
 async def yes(call:CallbackQuery,state:FSMContext):
 
- await call.message.answer("✅ Buyurtmangiz tasdiqlandi")
+ await call.message.answer("✅ Buyurtma tasdiqlandi")
 
  data=await state.get_data()
 
@@ -300,13 +312,7 @@ async def yes(call:CallbackQuery,state:FSMContext):
 
   await state.set_state(OrderState.receipt)
 
-  await call.message.answer(
-  f"""💳 Karta:
-
-{CARD_NUMBER}
-
-Chek yuboring"""
-  )
+  await call.message.answer(f"Karta\n{CARD_NUMBER}\nChek yuboring")
 
   return
 
@@ -321,16 +327,12 @@ async def receipt(m:Message,state:FSMContext):
 
 
 
-# ADMIN
-
 async def send_admin(obj,state,pay):
 
  data=await state.get_data()
 
- maps=f"https://maps.google.com/?q={data['location']}"
-
  text=f"""
-🆕 Zakaz
+🆕 Zakaz №{data['id']}
 
 👤 @{obj.from_user.username}
 
@@ -338,38 +340,37 @@ async def send_admin(obj,state,pay):
 
 📍 {data['region']}
 
-🏢 Dom: {data['dom']}
-🚪 Padez: {data['padez']}
+🏢 Dom:{data['dom']}
+🚪 Padez:{data['padez']}
 
-⚖ {data['kg']} kg
-🥗 Salat {data['salad_qty']}
+⚖ {data['kg']}kg
+🥗 {data['salad_qty']}
 
 💰 {data['total']}
 
-{data['payment']}
 {pay}
-
-{maps}
 """
 
- msg=await bot.send_message(
+ await bot.send_message(
  ADMIN_ID,
  text,
- reply_markup=admin_confirm_kb(1)
+ reply_markup=admin_confirm_kb(data['id'])
  )
 
- await obj.answer("✅ Buyurtma yuborildi")
+ await obj.answer("Admin kutmoqda")
 
  await state.clear()
 
 
 
-# ADMIN TASDIQ
+CLIENTS={}
+
+
 
 @dp.callback_query(F.data.startswith("admin_yes"))
 async def admin_yes(call:CallbackQuery):
 
- id=1
+ id=int(call.data.split("_")[2])
 
  text=call.message.text
 
@@ -381,28 +382,40 @@ async def admin_yes(call:CallbackQuery):
   reply_markup=courier_kb(id)
   )
 
- await call.message.edit_reply_markup()
-
  await call.answer("Kuriyerlarga yuborildi")
 
 
-
-# COURIER
 
 @dp.callback_query(F.data.startswith("take_"))
 async def take(call:CallbackQuery):
 
  id=int(call.data.split("_")[1])
 
- await call.message.edit_reply_markup(reply_markup=done_kb(id))
+ CLIENTS[id]=call.from_user.id
 
- await call.message.answer(
- f"🚚 Kuriyer {call.from_user.first_name} yo'lga chiqdi")
+ await call.message.edit_reply_markup(reply_markup=done_kb(id))
 
 
 
 @dp.callback_query(F.data.startswith("done_"))
 async def done(call:CallbackQuery):
+
+ id=int(call.data.split("_")[1])
+
+ user_id=CLIENTS.get(id)
+
+ if user_id:
+
+  await bot.send_message(
+  user_id,
+  "Zakazni oldingizmi?",
+  reply_markup=client_confirm_kb(id)
+  )
+
+
+
+@dp.callback_query(F.data.startswith("oldim_"))
+async def oldim(call:CallbackQuery):
 
  await call.message.answer("⭐ Baholang 1-5")
 
@@ -420,7 +433,6 @@ async def main():
  await bot.delete_webhook(drop_pending_updates=True)
 
  await dp.start_polling(bot)
-
 
 
 if __name__=="__main__":
