@@ -20,7 +20,7 @@ from aiogram.filters import Command
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-OSHKG_PRICE = 40000
+OSHKG_PRICE = 45000
 SALAD_PRICE = 5000
 CARD_NUMBER = "9860 0801 8165 2332"
 
