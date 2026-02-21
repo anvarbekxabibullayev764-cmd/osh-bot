@@ -16,11 +16,11 @@ TOKEN=os.getenv("BOT_TOKEN")
 
 ADMIN_ID=5915034478
 
-COURIERS=[
-589856755,
-5915034478,
-710708974
-]
+COURIERS={
+589856755:"Javohir",
+5915034478:"Anvarbek",
+710708974:"Hazratillo"
+}
 
 OSHKG_PRICE=45000
 SALAD_PRICE=5000
@@ -68,6 +68,8 @@ class OrderState(StatesGroup):
  salad=State()
  payment=State()
  receipt=State()
+ rating=State()
+
 
 
 def main_menu():
@@ -112,6 +114,7 @@ def done_kb(id):
  return kb.as_markup()
 
 
+
 @dp.message(Command("start"))
 async def start(m:Message):
 
@@ -126,12 +129,14 @@ Yetkazish bepul
  await m.answer(text,reply_markup=main_menu())
 
 
+
 @dp.message(F.text=="🛒 Buyurtma berish")
 async def order(m:Message,state:FSMContext):
 
  await state.set_state(OrderState.region)
 
  await m.answer("Hudud:",reply_markup=region_kb())
+
 
 
 @dp.message(OrderState.region)
@@ -144,6 +149,7 @@ async def region(m:Message,state:FSMContext):
  await m.answer("Dom:",reply_markup=ReplyKeyboardRemove())
 
 
+
 @dp.message(OrderState.dom)
 async def dom(m:Message,state:FSMContext):
 
@@ -152,6 +158,7 @@ async def dom(m:Message,state:FSMContext):
  await state.set_state(OrderState.padez)
 
  await m.answer("Padez:")
+
 
 
 @dp.message(OrderState.padez)
@@ -165,6 +172,7 @@ async def padez(m:Message,state:FSMContext):
  await state.set_state(OrderState.phone)
 
  await m.answer("Telefon:",reply_markup=kb.as_markup(resize_keyboard=True))
+
 
 
 @dp.message(OrderState.phone)
@@ -182,6 +190,7 @@ async def phone(m:Message,state:FSMContext):
  await m.answer("Lokatsiya:",reply_markup=kb.as_markup(resize_keyboard=True))
 
 
+
 @dp.message(OrderState.location)
 async def location(m:Message,state:FSMContext):
 
@@ -194,6 +203,7 @@ async def location(m:Message,state:FSMContext):
  await m.answer("Necha kg?",reply_markup=ReplyKeyboardRemove())
 
 
+
 @dp.message(OrderState.kg)
 async def kg(m:Message,state:FSMContext):
 
@@ -201,22 +211,21 @@ async def kg(m:Message,state:FSMContext):
 
  await state.set_state(OrderState.salad)
 
- await m.answer("Salat? Ha 2 yoki Yo'q")
+ await m.answer("Salat nechta? (0 bo'lsa 0 yozing)")
+
 
 
 @dp.message(OrderState.salad)
 async def salad(m:Message,state:FSMContext):
 
- qty=0
-
- if "ha" in m.text.lower():
-  qty=int(m.text.split()[1])
+ qty=int(m.text)
 
  await state.update_data(salad_qty=qty)
 
  await state.set_state(OrderState.payment)
 
  await m.answer("To'lov:",reply_markup=payment_kb())
+
 
 
 @dp.message(OrderState.payment)
@@ -240,14 +249,12 @@ async def payment(m:Message,state:FSMContext):
 🚪 Padez: {data['padez']}
 
 ⚖ Osh:
-{data['kg']} kg × {OSHKG_PRICE} = {osh}
+{data['kg']} kg
 
 🥗 Salat:
-{data['salad_qty']} × {SALAD_PRICE} = {salat}
+{data['salad_qty']} ta
 
 💰 Jami: {total}
-
-Tasdiqlaysizmi?
 """
 
  kb=InlineKeyboardBuilder()
@@ -257,10 +264,9 @@ Tasdiqlaysizmi?
  await m.answer(text,reply_markup=kb.as_markup())
 
 
+
 @dp.callback_query(F.data=="yes")
 async def yes(call:CallbackQuery,state:FSMContext):
-
- await call.message.answer("✅ Buyurtmangiz tasdiqlandi")
 
  data=await state.get_data()
 
@@ -268,27 +274,54 @@ async def yes(call:CallbackQuery,state:FSMContext):
 
   await state.set_state(OrderState.receipt)
 
-  await call.message.answer(f"Karta:\n{CARD_NUMBER}\nChek yuboring")
+  await call.message.answer(
+  f"Karta:\n{CARD_NUMBER}\nChek yuboring")
 
   return
 
- await send_admin(call,state,"❌ To'lanmagan")
+ await save_order(call,state,"❌ To'lanmagan")
+
 
 
 @dp.message(OrderState.receipt,F.photo)
 async def receipt(m:Message,state:FSMContext):
 
- await send_admin(m,state,"✅ To'langan")
+ await save_order(m,state,"✅ To'langan")
 
 
-async def send_admin(obj,state,pay):
+
+async def save_order(obj,state,pay):
 
  data=await state.get_data()
+
+ cur.execute("""
+ INSERT INTO orders VALUES(
+ NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ """,(obj.from_user.id,
+ obj.from_user.username,
+ data["region"],
+ data["dom"],
+ data["padez"],
+ data["phone"],
+ data["location"],
+ data["kg"],
+ data["salad_qty"],
+ data["total"],
+ data["payment"],
+ pay,
+ "Kutilmoqda",
+ "",
+ 0,
+ datetime.now()))
+
+ conn.commit()
+
+ order_id=cur.lastrowid
 
  maps=f"https://maps.google.com/?q={data['location']}"
 
  text=f"""
-🆕 Zakaz
+🆕 Zakaz №{order_id}
 
 👤 @{obj.from_user.username}
 
@@ -296,11 +329,11 @@ async def send_admin(obj,state,pay):
 
 📍 {data['region']}
 
-🏢 Dom: {data['dom']}
-🚪 Padez: {data['padez']}
+🏢 Dom {data['dom']}
+🚪 Padez {data['padez']}
 
 ⚖ {data['kg']} kg
-🥗 Salat {data['salad_qty']}
+🥗 {data['salad_qty']} ta
 
 💰 {data['total']}
 
@@ -310,21 +343,25 @@ async def send_admin(obj,state,pay):
 {maps}
 """
 
- msg=await bot.send_message(
+ await bot.send_message(
  ADMIN_ID,
  text,
- reply_markup=admin_confirm_kb(1)
+ reply_markup=admin_confirm_kb(order_id)
  )
 
- await obj.answer("✅ Buyurtma yuborildi")
+ await obj.answer("✅ Buyurtma adminga yuborildi")
 
  await state.clear()
+
 
 
 @dp.callback_query(F.data.startswith("admin_yes"))
 async def admin_yes(call:CallbackQuery):
 
- id=1
+ id=int(call.data.split("_")[2])
+
+ cur.execute("UPDATE orders SET status='Tasdiqlandi' WHERE id=?",(id,))
+ conn.commit()
 
  text=call.message.text
 
@@ -336,9 +373,8 @@ async def admin_yes(call:CallbackQuery):
   reply_markup=courier_kb(id)
   )
 
- await call.message.edit_reply_markup()
-
  await call.answer("Kuriyerlarga yuborildi")
+
 
 
 @dp.callback_query(F.data.startswith("take_"))
@@ -346,22 +382,45 @@ async def take(call:CallbackQuery):
 
  id=int(call.data.split("_")[1])
 
- await call.message.edit_reply_markup(reply_markup=done_kb(id))
+ cur.execute("UPDATE orders SET courier=? WHERE id=?",
+ (COURIERS[call.from_user.id],id))
 
- await call.message.answer(
- f"🚚 Kuriyer {call.from_user.first_name} yo'lga chiqdi")
+ conn.commit()
+
+ await call.message.edit_reply_markup(
+ reply_markup=done_kb(id))
+
+ await call.answer("Qabul qilindi")
+
 
 
 @dp.callback_query(F.data.startswith("done_"))
-async def done(call:CallbackQuery):
+async def done(call:CallbackQuery,state:FSMContext):
+
+ id=int(call.data.split("_")[1])
+
+ await state.update_data(order_id=id)
+
+ await state.set_state(OrderState.rating)
 
  await call.message.answer("⭐ Baholang 1-5")
 
 
-@dp.message(F.text.in_(["1","2","3","4","5"]))
-async def rating(m:Message):
+
+@dp.message(OrderState.rating)
+async def rating(m:Message,state:FSMContext):
+
+ data=await state.get_data()
+
+ cur.execute("UPDATE orders SET rating=? WHERE id=?",
+ (int(m.text),data["order_id"]))
+
+ conn.commit()
 
  await m.answer("Rahmat ⭐")
+
+ await state.clear()
+
 
 
 async def main():
