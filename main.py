@@ -26,7 +26,7 @@ if not TOKEN:
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(TOKEN)   # parse_mode xatosi tuzatildi
 dp = Dispatcher(storage=MemoryStorage())
 
 # ================= DATABASE =================
@@ -115,18 +115,6 @@ def courier_kb(order_id):
     kb.button(text="🚴 Qabul qilish", callback_data=f"take_{order_id}")
     return kb.as_markup()
 
-def delivered_kb(order_id):
-    kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Yetkazildi", callback_data=f"done_{order_id}")
-    return kb.as_markup()
-
-def rating_kb(order_id):
-    kb = InlineKeyboardBuilder()
-    for i in range(1,6):
-        kb.button(text=str(i), callback_data=f"rate_{order_id}_{i}")
-    kb.adjust(5)
-    return kb.as_markup()
-
 # ================= START =================
 @dp.message(Command("start"))
 async def start(message: Message):
@@ -152,13 +140,15 @@ async def dom(message: Message, state: FSMContext):
 
 @dp.message(OrderState.padez)
 async def padez(message: Message, state: FSMContext):
+
     await state.update_data(padez=message.text)
 
     kb = ReplyKeyboardBuilder()
-    kb.add(KeyboardButton(text="📱 Raqam yuborish+998", request_contact=True))
+    kb.add(KeyboardButton(text="📱 Raqam yuborish+998",request_contact=True))
 
     await state.set_state(OrderState.phone)
-    await message.answer("Telefon:", reply_markup=kb.as_markup(resize_keyboard=True))
+
+    await message.answer("Telefon:",reply_markup=kb.as_markup(resize_keyboard=True))
 
 @dp.message(OrderState.phone)
 async def phone(message: Message, state: FSMContext):
@@ -168,16 +158,20 @@ async def phone(message: Message, state: FSMContext):
     await state.update_data(phone=phone)
 
     kb = ReplyKeyboardBuilder()
-    kb.add(KeyboardButton(text="📍 Lokatsiya", request_location=True))
+    kb.add(KeyboardButton(text="📍 Lokatsiya",request_location=True))
 
     await state.set_state(OrderState.location)
 
-    await message.answer("Lokatsiya:", reply_markup=kb.as_markup(resize_keyboard=True))
+    await message.answer("Lokatsiya:",reply_markup=kb.as_markup(resize_keyboard=True))
 
 @dp.message(OrderState.location)
 async def location(message: Message, state: FSMContext):
 
-    loc = f"{message.location.latitude},{message.location.longitude}"
+    if not message.location:
+        await message.answer("📍 Lokatsiya tugmasini bosing")
+        return
+
+    loc=f"{message.location.latitude},{message.location.longitude}"
 
     await state.update_data(location=loc)
 
@@ -192,7 +186,7 @@ async def kg(message: Message, state: FSMContext):
 
     await state.set_state(OrderState.salad)
 
-    await message.answer("Salat kerakmi? Masalan: Ha 2")
+    await message.answer("Salat kerakmi? (5 000) Masalan: Ha 2")
 
 @dp.message(OrderState.salad)
 async def salad(message: Message, state: FSMContext):
@@ -251,13 +245,6 @@ async def confirm_yes(call:CallbackQuery,state:FSMContext):
 
     await create_order(call.message,state)
 
-@dp.callback_query(F.data=="confirm_no")
-async def confirm_no(call:CallbackQuery,state:FSMContext):
-
-    await state.clear()
-
-    await call.message.edit_text("❌ Buyurtma bekor qilindi")
-
 # ================= CREATE ORDER =================
 async def create_order(message,state,receipt_file=None):
 
@@ -279,39 +266,9 @@ async def create_order(message,state,receipt_file=None):
 
     order_id=cur.lastrowid
 
-    if data["payment"]=="💳 Karta":
-        pay_text="💳 Karta orqali to'langan"
-    else:
-        pay_text="💵 Naqd — Yetkazilganda to'lanadi"
+    text=f"🆕 Buyurtma #{order_id}"
 
-    text=f"""🆕 Buyurtma #{order_id}
-
-👤 @{message.from_user.username}
-
-📍 {data['region']}
-🏢 {data['dom']} | {data['padez']}
-
-📞 {data['phone']}
-
-📦 {data['kg']}kg
-🥗 {data['salad_qty']}
-
-💰 {data['total']} so'm
-
-{pay_text}
-"""
-
-    if receipt_file:
-
-        await bot.send_photo(
-        ADMIN_ID,
-        receipt_file,
-        caption=text,
-        reply_markup=admin_confirm_kb(order_id))
-
-    else:
-
-        await bot.send_message(
+    await bot.send_message(
         ADMIN_ID,
         text,
         reply_markup=admin_confirm_kb(order_id))
@@ -319,11 +276,6 @@ async def create_order(message,state,receipt_file=None):
     await message.answer("⏳ Admin tasdiqlashi kutilmoqda.")
 
     await state.clear()
-
-@dp.message(OrderState.receipt,F.photo)
-async def receipt(message:Message,state:FSMContext):
-
-    await create_order(message,state,message.photo[-1].file_id)
 
 # ================= ADMIN TASDIQ =================
 @dp.callback_query(F.data.startswith("ok_"))
@@ -334,61 +286,10 @@ async def approve(call:CallbackQuery):
     cur.execute("UPDATE orders SET status='approved' WHERE id=?",(order_id,))
     conn.commit()
 
-    cur.execute("""SELECT user_id,total,region,dom,padez,
-    phone,location,kg,salad_qty,payment_type
-    FROM orders WHERE id=?""",(order_id,))
-
-    row=cur.fetchone()
-
-    user_id=row[0]
-    total=row[1]
-
-    region=row[2]
-    dom=row[3]
-    padez=row[4]
-    phone=row[5]
-    location=row[6]
-    kg=row[7]
-    salad=row[8]
-    payment=row[9]
-
-    if payment=="💳 Karta":
-        pay_text="💳 To'langan"
-    else:
-        pay_text="💵 Naqd olasiz"
-
-    lat,lon=location.split(",")
-
-    await bot.send_message(
-    user_id,
-    f"✅ Buyurtmangiz tasdiqlandi!\n💰 {total} so'm")
-
-    cur.execute("SELECT user_id FROM couriers")
-
-    for c in cur.fetchall():
-
-        await bot.send_message(
-        c[0],
-
-f"""🚚 Buyurtma #{order_id}
-
-📍 {region}
-🏢 {dom} | {padez}
-
-📞 {phone}
-
-📦 {kg} kg
-🥗 {salad}
-
-{pay_text}
-
-📍 Lokatsiya:
-https://maps.google.com/?q={lat},{lon}
-""",
-
-reply_markup=courier_kb(order_id))
-
-    await call.message.edit_caption("✅ Tasdiqlandi")
+    try:
+        await call.message.edit_caption("✅ Tasdiqlandi")
+    except:
+        await call.message.edit_text("✅ Tasdiqlandi")
 
 # ================= RUN =================
 async def main():
