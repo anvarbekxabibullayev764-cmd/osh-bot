@@ -57,10 +57,8 @@ created TEXT)
 
 conn.commit()
 
-# STATES
 
 class OrderState(StatesGroup):
-
  region=State()
  dom=State()
  padez=State()
@@ -71,69 +69,48 @@ class OrderState(StatesGroup):
  payment=State()
  receipt=State()
 
-# MENYU
 
 def main_menu():
-
  kb=ReplyKeyboardBuilder()
  kb.add(KeyboardButton(text="🛒 Buyurtma berish"))
  return kb.as_markup(resize_keyboard=True)
 
 
 def region_kb():
-
  kb=ReplyKeyboardBuilder()
-
  kb.add(KeyboardButton(text="GULOBOD"))
  kb.add(KeyboardButton(text="SARXUMDON"))
-
  kb.adjust(2)
-
  return kb.as_markup()
 
 
 def payment_kb():
-
  kb=ReplyKeyboardBuilder()
-
  kb.add(KeyboardButton(text="💳 Karta"))
  kb.add(KeyboardButton(text="💵 Naqd"))
-
  kb.adjust(2)
-
  return kb.as_markup()
 
 
 def admin_confirm_kb(id):
-
  kb=InlineKeyboardBuilder()
-
  kb.button(text="✅ Tasdiqlash",callback_data=f"admin_yes_{id}")
  kb.button(text="❌ Bekor",callback_data=f"admin_no_{id}")
-
  kb.adjust(2)
-
  return kb.as_markup()
 
 
 def courier_kb(id):
-
  kb=InlineKeyboardBuilder()
-
  kb.button(text="🚚 Qabul qilish",callback_data=f"take_{id}")
-
  return kb.as_markup()
 
 
 def done_kb(id):
-
  kb=InlineKeyboardBuilder()
-
  kb.button(text="✅ Yetkazildi",callback_data=f"done_{id}")
-
  return kb.as_markup()
 
-# START
 
 @dp.message(Command("start"))
 async def start(m:Message):
@@ -142,12 +119,12 @@ async def start(m:Message):
 🍽 Gulobod osh bot
 
 1 kg narxi 45000 so'm
-Yetkazib berish bepul
+Salat 5000 so'm
+Yetkazish bepul
 """
 
  await m.answer(text,reply_markup=main_menu())
 
-# ORDER
 
 @dp.message(F.text=="🛒 Buyurtma berish")
 async def order(m:Message,state:FSMContext):
@@ -183,7 +160,6 @@ async def padez(m:Message,state:FSMContext):
  await state.update_data(padez=m.text)
 
  kb=ReplyKeyboardBuilder()
-
  kb.add(KeyboardButton(text="📱 Raqam",request_contact=True))
 
  await state.set_state(OrderState.phone)
@@ -199,7 +175,6 @@ async def phone(m:Message,state:FSMContext):
  await state.update_data(phone=phone)
 
  kb=ReplyKeyboardBuilder()
-
  kb.add(KeyboardButton(text="📍 Lokatsiya",request_location=True))
 
  await state.set_state(OrderState.location)
@@ -235,7 +210,6 @@ async def salad(m:Message,state:FSMContext):
  qty=0
 
  if "ha" in m.text.lower():
-
   qty=int(m.text.split()[1])
 
  await state.update_data(salad_qty=qty)
@@ -250,7 +224,10 @@ async def payment(m:Message,state:FSMContext):
 
  data=await state.get_data()
 
- total=int(data["kg"]*OSHKG_PRICE+data["salad_qty"]*SALAD_PRICE)
+ osh=int(data["kg"]*OSHKG_PRICE)
+ salat=int(data["salad_qty"]*SALAD_PRICE)
+
+ total=osh+salat
 
  await state.update_data(total=total,payment=m.text)
 
@@ -258,32 +235,32 @@ async def payment(m:Message,state:FSMContext):
 📦 Buyurtma
 
 📍 {data['region']}
-🏢 {data['dom']} | {data['padez']}
 
-📞 {data['phone']}
+🏢 Dom: {data['dom']}
+🚪 Padez: {data['padez']}
 
-⚖ {data['kg']} kg
-🥗 Salat {data['salad_qty']} ta
+⚖ Osh:
+{data['kg']} kg × {OSHKG_PRICE} = {osh}
 
-💰 {total} so'm
+🥗 Salat:
+{data['salad_qty']} × {SALAD_PRICE} = {salat}
+
+💰 Jami: {total}
 
 Tasdiqlaysizmi?
 """
 
- await m.answer(text)
-
  kb=InlineKeyboardBuilder()
-
  kb.button(text="✅ Tasdiqlash",callback_data="yes")
  kb.button(text="❌ Bekor",callback_data="no")
 
- await m.answer("Tasdiqlang",reply_markup=kb.as_markup())
+ await m.answer(text,reply_markup=kb.as_markup())
 
-
-# CONFIRM
 
 @dp.callback_query(F.data=="yes")
 async def yes(call:CallbackQuery,state:FSMContext):
+
+ await call.message.answer("✅ Buyurtmangiz tasdiqlandi")
 
  data=await state.get_data()
 
@@ -304,8 +281,6 @@ async def receipt(m:Message,state:FSMContext):
  await send_admin(m,state,"✅ To'langan")
 
 
-# SEND ADMIN
-
 async def send_admin(obj,state,pay):
 
  data=await state.get_data()
@@ -320,10 +295,12 @@ async def send_admin(obj,state,pay):
 📞 {data['phone']}
 
 📍 {data['region']}
-🏢 {data['dom']} | {data['padez']}
+
+🏢 Dom: {data['dom']}
+🚪 Padez: {data['padez']}
 
 ⚖ {data['kg']} kg
-🥗 Salat {data['salad_qty']} ta
+🥗 Salat {data['salad_qty']}
 
 💰 {data['total']}
 
@@ -343,16 +320,11 @@ async def send_admin(obj,state,pay):
 
  await state.clear()
 
-# ADMIN CONFIRM
 
 @dp.callback_query(F.data.startswith("admin_yes"))
 async def admin_yes(call:CallbackQuery):
 
  id=1
-
- cur.execute("UPDATE orders SET status='accepted'")
-
- conn.commit()
 
  text=call.message.text
 
@@ -369,8 +341,6 @@ async def admin_yes(call:CallbackQuery):
  await call.answer("Kuriyerlarga yuborildi")
 
 
-# COURIER TAKE
-
 @dp.callback_query(F.data.startswith("take_"))
 async def take(call:CallbackQuery):
 
@@ -382,15 +352,11 @@ async def take(call:CallbackQuery):
  f"🚚 Kuriyer {call.from_user.first_name} yo'lga chiqdi")
 
 
-# DONE
-
 @dp.callback_query(F.data.startswith("done_"))
 async def done(call:CallbackQuery):
 
  await call.message.answer("⭐ Baholang 1-5")
 
-
-# RATING
 
 @dp.message(F.text.in_(["1","2","3","4","5"]))
 async def rating(m:Message):
@@ -398,14 +364,12 @@ async def rating(m:Message):
  await m.answer("Rahmat ⭐")
 
 
-# RUN
-
 async def main():
 
  await bot.delete_webhook(drop_pending_updates=True)
 
  await dp.start_polling(bot)
 
-if __name__=="__main__":
 
+if __name__=="__main__":
  asyncio.run(main())
