@@ -366,7 +366,53 @@ async def yes(call:CallbackQuery,state:FSMContext):
 @dp.message(OrderState.receipt,F.photo)
 async def receipt(m:Message,state:FSMContext):
 
- await send_admin(m,state,"✅ To'langan")
+ data=await state.get_data()
+
+ username=m.from_user.username
+
+ if username:
+  user=f"@{username}"
+ else:
+  user=m.from_user.first_name
+
+
+ text=f"""
+🆕 Zakaz №{data['id']}
+
+👤 {user}
+
+📞 {data['phone']}
+
+📍 {data['region']}
+
+🏢 Dom:{data['dom']}
+🚪 Padez:{data['padez']}
+
+⚖ {data['kg']}kg
+🥗 {data['salad_qty']}
+
+💰 {data['total']}
+
+✅ To'langan
+"""
+
+
+ await bot.send_photo(
+
+ ADMIN_ID,
+
+ m.photo[-1].file_id,
+
+ caption=text,
+
+ reply_markup=admin_confirm_kb(data['id'])
+
+ )
+
+
+ await m.answer("✅ Chek adminga yuborildi")
+
+ await state.clear()
 
 
 
