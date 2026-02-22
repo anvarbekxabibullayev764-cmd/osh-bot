@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-from datetime import datetime
 from openpyxl import Workbook
 
 from aiogram import Bot, Dispatcher, F
@@ -24,9 +23,9 @@ SALAD_PRICE=5000
 OSH_OPEN=True
 ORDER_ID=1
 
+CANCELLED=0
 TOTAL_KG=0
 TOTAL_SALAD=0
-ADMIN_CANCEL=0
 
 logging.basicConfig(level=logging.INFO)
 
@@ -35,8 +34,9 @@ dp=Dispatcher(storage=MemoryStorage())
 
 CLIENTS={}
 ORDERS={}
-PAYMENT_TYPE={}
-RATING_USERS={}
+PAYMENTS={}
+ORDER_DATA={}
+CHECK_WAIT={}
 
 
 class OrderState(StatesGroup):
@@ -48,7 +48,7 @@ class OrderState(StatesGroup):
  kg=State()
  salad=State()
  payment=State()
- chek=State()
+ check=State()
 
 
 def main_menu():
@@ -78,6 +78,7 @@ def payment_kb():
  kb=ReplyKeyboardBuilder()
  kb.add(KeyboardButton(text="💳 Karta"))
  kb.add(KeyboardButton(text="💵 Naqd"))
+ kb.adjust(2)
  return kb.as_markup(resize_keyboard=True)
 
 
@@ -94,17 +95,7 @@ def courier_kb(id):
  return kb.as_markup()
 
 
-def done_kb(id):
- kb=InlineKeyboardBuilder()
- kb.button(text="✅ Yetkazildi",callback_data=f"done_{id}")
- return kb.as_markup()
-
-
-def client_confirm_kb(id):
- kb=InlineKeyboardBuilder()
- kb.button(text="✅ Oldim",callback_data=f"oldim_{id}")
- return kb.as_markup()
-
+# START
 
 @dp.message(Command("start"))
 async def start(m:Message,state:FSMContext):
@@ -116,41 +107,37 @@ async def start(m:Message,state:FSMContext):
   return
 
  await m.answer(
- f"🍽 Osh bot\n\n1kg={OSHKG_PRICE}\nSalat={SALAD_PRICE}",
- reply_markup=main_menu()
- )
+ f"1kg osh={OSHKG_PRICE}\nSalat={SALAD_PRICE}",
+ reply_markup=main_menu())
 
+
+# START STOP
 
 @dp.message(F.text=="🟢 START")
 async def start_osh(m:Message):
 
  global OSH_OPEN
-
- if m.from_user.id==ADMIN_ID:
-  OSH_OPEN=True
-  await m.answer("Osh ochildi")
+ OSH_OPEN=True
+ await m.answer("Osh ochildi")
 
 
 @dp.message(F.text=="🔴 STOP")
 async def stop_osh(m:Message):
 
  global OSH_OPEN
+ OSH_OPEN=False
 
- if m.from_user.id==ADMIN_ID:
+ await m.answer("Osh yopildi")
 
-  OSH_OPEN=False
-
-  await m.answer("Osh yopildi")
-
-  await daily_report()
+ await daily_report()
 
 
 @dp.message(F.text=="📊 Hisobot")
 async def report(m:Message):
+ await daily_report()
 
- if m.from_user.id==ADMIN_ID:
-  await daily_report()
 
+# BUYURTMA
 
 @dp.message(F.text=="🛒 Buyurtma berish")
 async def order(m:Message,state:FSMContext):
@@ -160,7 +147,6 @@ async def order(m:Message,state:FSMContext):
   return
 
  await state.set_state(OrderState.region)
-
  await m.answer("Hudud:",reply_markup=region_kb())
 
 
@@ -170,30 +156,35 @@ async def region(m:Message,state:FSMContext):
  await state.update_data(region=m.text)
 
  await state.set_state(OrderState.dom)
-
  await m.answer("Dom:",reply_markup=ReplyKeyboardRemove())
 
 
 @dp.message(OrderState.dom)
 async def dom(m:Message,state:FSMContext):
 
+ if not m.text.isdigit():
+  await m.answer("Faqat raqam yozing")
+  return
+
  await state.update_data(dom=m.text)
 
  await state.set_state(OrderState.padez)
-
  await m.answer("Padez:")
 
 
 @dp.message(OrderState.padez)
 async def padez(m:Message,state:FSMContext):
 
+ if not m.text.isdigit():
+  await m.answer("Faqat raqam yozing")
+  return
+
  await state.update_data(padez=m.text)
 
  kb=ReplyKeyboardBuilder()
- kb.add(KeyboardButton(text="Telefon",request_contact=True))
+ kb.add(KeyboardButton(text="📱 Telefon",request_contact=True))
 
  await state.set_state(OrderState.phone)
-
  await m.answer("Telefon:",reply_markup=kb.as_markup(resize_keyboard=True))
 
 
@@ -205,10 +196,9 @@ async def phone(m:Message,state:FSMContext):
  await state.update_data(phone=phone)
 
  kb=ReplyKeyboardBuilder()
- kb.add(KeyboardButton(text="Lokatsiya",request_location=True))
+ kb.add(KeyboardButton(text="📍 Lokatsiya",request_location=True))
 
  await state.set_state(OrderState.location)
-
  await m.answer("Lokatsiya:",reply_markup=kb.as_markup(resize_keyboard=True))
 
 
@@ -216,12 +206,11 @@ async def phone(m:Message,state:FSMContext):
 async def location(m:Message,state:FSMContext):
 
  await state.update_data(
- location=(m.location.latitude,m.location.longitude)
- )
+ location=(m.location.latitude,m.location.longitude))
 
  await state.set_state(OrderState.kg)
 
- await m.answer(f"Necha kg?\n1kg={OSHKG_PRICE}")
+ await m.answer(f"Kg kiriting\n1kg={OSHKG_PRICE}")
 
 
 @dp.message(OrderState.kg)
@@ -231,7 +220,7 @@ async def kg(m:Message,state:FSMContext):
 
  await state.set_state(OrderState.salad)
 
- await m.answer(f"Salat nechta?\n1ta={SALAD_PRICE}")
+ await m.answer(f"Salat nechta\n1ta={SALAD_PRICE}")
 
 
 @dp.message(OrderState.salad)
@@ -244,221 +233,164 @@ async def salad(m:Message,state:FSMContext):
  await m.answer("Tolov:",reply_markup=payment_kb())
 
 
+# TOLOV
+
 @dp.message(OrderState.payment)
 async def payment(m:Message,state:FSMContext):
 
  if m.text=="💳 Karta":
+  await state.set_state(OrderState.check)
+  await m.answer("Chek yuboring")
+  return
 
-  await state.update_data(payment="Karta")
-
-  await state.set_state(OrderState.chek)
-
-  await m.answer("Chek rasmini yuboring")
-
- else:
-
-  await state.update_data(payment="Naqd")
-
-  await finish_order(m,state)
+ await finish_order(m,state,"Naqd")
 
 
-@dp.message(OrderState.chek,F.photo)
-async def chek(m:Message,state:FSMContext):
+# CHEK
 
- data=await state.get_data()
-
- await bot.send_photo(
- ADMIN_ID,
- m.photo[-1].file_id,
- caption="Chek tasdiqlash",
- reply_markup=InlineKeyboardBuilder()
- .button(text="Tasdiqlash",callback_data="chek_yes")
- .as_markup()
- )
-
- await m.answer("Chek yuborildi")
-
-
-async def finish_order(m,state):
+@dp.message(OrderState.check,F.photo)
+async def check(m:Message,state:FSMContext):
 
  global ORDER_ID
 
  data=await state.get_data()
 
+ id=ORDER_ID
+
+ data["id"]=id
+ data["user_id"]=m.from_user.id
+
+ CHECK_WAIT[id]=data
+
+ await bot.send_photo(
+ ADMIN_ID,
+ m.photo[-1].file_id,
+ caption=f"Chek\nZakaz:{id}",
+ reply_markup=admin_confirm_kb(id))
+
+ await m.answer("Chek yuborildi")
+ await state.clear()
+
+
+# ADMIN TASDIQ
+
+@dp.callback_query(F.data.startswith("admin_yes"))
+async def admin_yes(call:CallbackQuery):
+
+ global TOTAL_KG,TOTAL_SALAD,ORDER_ID
+
+ id=int(call.data.split("_")[2])
+
+ data=CHECK_WAIT.get(id)
+
+ if data:
+
+  total=int(data["kg"]*OSHKG_PRICE)+int(data["salad_qty"]*SALAD_PRICE)
+
+  PAYMENTS[id]="Karta"
+  ORDERS[id]=total
+
+  TOTAL_KG+=data["kg"]
+  TOTAL_SALAD+=data["salad_qty"]
+
+  text=f"""
+Zakaz {id}
+
+Kg:{data['kg']}
+Salat:{data['salad_qty']}
+
+Tolov:Karta
+"""
+
+  for c in COURIERS:
+   await bot.send_message(c,text,reply_markup=courier_kb(id))
+
+  ORDER_ID+=1
+
+ await call.message.edit_text("Tasdiqlandi")
+
+
+# ADMIN BEKOR
+
+@dp.callback_query(F.data.startswith("admin_no"))
+async def admin_no(call:CallbackQuery):
+
+ global CANCELLED
+ CANCELLED+=1
+
+ await call.message.edit_text("Bekor qilindi")
+
+
+# KURIYER
+
+@dp.callback_query(F.data.startswith("take"))
+async def take(call:CallbackQuery):
+
+ await call.message.edit_text("Kuriyer oldi")
+
+
+# NAQD
+
+async def finish_order(m,state,payment):
+
+ global ORDER_ID,TOTAL_KG,TOTAL_SALAD
+
+ data=await state.get_data()
+
  total=int(data["kg"]*OSHKG_PRICE)+int(data["salad_qty"]*SALAD_PRICE)
 
- PAYMENT_TYPE[ORDER_ID]=data["payment"]
+ id=ORDER_ID
 
- ORDERS[ORDER_ID]=total
+ PAYMENTS[id]=payment
+ ORDERS[id]=total
 
- CLIENTS[ORDER_ID]=m.from_user.id
+ TOTAL_KG+=data["kg"]
+ TOTAL_SALAD+=data["salad_qty"]
+
+ ORDER_ID+=1
 
  text=f"""
-Zakaz {ORDER_ID}
+Zakaz {id}
 
-Mijoz ID {m.from_user.id}
+Kg:{data['kg']}
+Salat:{data['salad_qty']}
 
-{data['phone']}
-
-{data['region']} {data['dom']} {data['padez']}
-
-{data['kg']}kg
-Salat {data['salad_qty']}
-
-{total}
+Tolov:Naqd
 """
 
  await bot.send_message(
  ADMIN_ID,
  text,
- reply_markup=admin_confirm_kb(ORDER_ID)
- )
+ reply_markup=admin_confirm_kb(id))
 
- await m.answer("Buyurtma yuborildi")
-
- ORDER_ID+=1
+ await m.answer("Qabul qilindi",reply_markup=main_menu())
 
  await state.clear()
 
 
-@dp.callback_query(F.data.startswith("admin_yes"))
-async def admin_yes(call:CallbackQuery):
-
- global TOTAL_KG,TOTAL_SALAD
-
- id=int(call.data.split("_")[2])
-
- text=call.message.text
-
- for line in text.split("\n"):
-  if "kg" in line:
-   TOTAL_KG+=float(line.split("kg")[0].split()[-1])
-  if "Salat" in line:
-   TOTAL_SALAD+=int(line.split()[-1])
-
- pay=PAYMENT_TYPE[id]
-
- text+="\nTolov:"+("Tolangan" if pay=="Karta" else "Tolangan emas")
-
- for c in COURIERS:
-
-  await bot.send_message(c,text,reply_markup=courier_kb(id))
-
- await call.message.edit_text("Tasdiqlandi")
-
-
-@dp.callback_query(F.data.startswith("admin_no"))
-async def admin_no(call:CallbackQuery):
-
- global ADMIN_CANCEL
-
- ADMIN_CANCEL+=1
-
- await call.message.edit_text("Bekor")
-
-
-@dp.callback_query(F.data.startswith("take_"))
-async def take(call:CallbackQuery):
-
- id=int(call.data.split("_")[1])
-
- user_id=CLIENTS.get(id)
-
- if user_id:
-  await bot.send_message(user_id,"Kuryer yolda")
-
- await call.message.answer("Yetkazilgach bosing",reply_markup=done_kb(id))
-
-
-@dp.callback_query(F.data.startswith("done_"))
-async def done(call:CallbackQuery):
-
- id=int(call.data.split("_")[1])
-
- user_id=CLIENTS.get(id)
-
- if user_id:
-
-  await bot.send_message(
-   user_id,
-   "Yetkazildi",
-   reply_markup=client_confirm_kb(id)
-  )
-
-
-@dp.callback_query(F.data.startswith("oldim_"))
-async def oldim(call:CallbackQuery):
-
- RATING_USERS[call.from_user.id]=True
-
- kb=ReplyKeyboardBuilder()
-
- kb.add(KeyboardButton(text="1"))
- kb.add(KeyboardButton(text="2"))
- kb.add(KeyboardButton(text="3"))
- kb.add(KeyboardButton(text="4"))
- kb.add(KeyboardButton(text="5"))
-
- kb.adjust(5)
-
- await call.message.answer("Baholang",reply_markup=kb.as_markup(resize_keyboard=True))
-
-
-@dp.message(F.text.in_(["1","2","3","4","5"]))
-async def rating(m:Message):
-
- if m.from_user.id in RATING_USERS:
-
-  await bot.send_message(
-   ADMIN_ID,
-   f"Baho {m.text}"
-  )
-
-  del RATING_USERS[m.from_user.id]
-
-  await m.answer("Rahmat",reply_markup=main_menu())
-
+# HISOBOT
 
 async def daily_report():
 
  wb=Workbook()
  ws=wb.active
 
- total=0
-
- for i in ORDERS:
-  ws.append([i,ORDERS[i]])
-  total+=ORDERS[i]
-
- ws.append(["Jami",total])
+ ws.append(["Kg sotildi",TOTAL_KG])
+ ws.append(["Salat sotildi",TOTAL_SALAD])
+ ws.append(["Bekor qilingan",CANCELLED])
 
  wb.save("hisobot.xlsx")
 
- text=f"""
-Kunlik hisobot
-
-Jami {total}
-
-Osh {TOTAL_KG}kg
-
-Salat {TOTAL_SALAD}
-
-Bekor {ADMIN_CANCEL}
-"""
-
- await bot.send_message(ADMIN_ID,text)
-
  await bot.send_document(
  ADMIN_ID,
- open("hisobot.xlsx","rb")
- )
+ open("hisobot.xlsx","rb"))
 
 
 async def main():
 
  await bot.delete_webhook(drop_pending_updates=True)
-
  await dp.start_polling(bot)
 
 
-asyncio.run(main())
+if __name__=="__main__":
+ asyncio.run(main())
