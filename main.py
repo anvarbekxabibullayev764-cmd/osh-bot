@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.filters import Command
 
-TOKEN=os.getenv("BOT_TOKEN")
+TOKEN=os.getenv("8384492890:AAFGYP-SJURZzztaYfv6tDdA1SU422FDJ7U")
 
 ADMIN_ID=5915034478
 
