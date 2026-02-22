@@ -300,7 +300,7 @@ async def yes(call:CallbackQuery,state:FSMContext):
 
  CLIENTS[data["id"]]=data["user_id"]
 
- await call.message.edit_text("✅ Buyurtmangiz tasdiqlandi")
+ await call.message.edit_text("✅ Buyurtma tasdiqlandi")
 
  if data["payment"]=="💳 Karta":
 
@@ -322,6 +322,44 @@ async def no(call:CallbackQuery,state:FSMContext):
  await call.answer()
 
  await call.message.edit_text("❌ Buyurtma bekor qilindi")
+
+ await state.clear()
+
+
+# ✅ CHEK QISMI (FIX)
+@dp.message(OrderState.receipt,F.photo)
+async def receipt(m:Message,state:FSMContext):
+
+ data=await state.get_data()
+
+ text=f"""
+🆕 Zakaz №{data['id']}
+
+👤 Mijoz ID: {data['user_id']}
+
+📞 {data['phone']}
+
+📍 {data['region']}
+
+🏢 Dom:{data['dom']}
+🚪 Padez:{data['padez']}
+
+⚖ {data['kg']}kg
+🥗 {data['salad_qty']}
+
+💰 {data['total']}
+
+💳 KARTA TO'LOV
+"""
+
+ await bot.send_photo(
+  ADMIN_ID,
+  m.photo[-1].file_id,
+  caption=text,
+  reply_markup=admin_confirm_kb(data['id'])
+ )
+
+ await m.answer("✅ Chek yuborildi")
 
  await state.clear()
 
