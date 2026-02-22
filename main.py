@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import datetime
 from openpyxl import Workbook
 
 from aiogram import Bot, Dispatcher, F
@@ -33,7 +34,7 @@ dp=Dispatcher(storage=MemoryStorage())
 CLIENTS={}
 CLIENT_RATING={}
 ORDERS={}
-TAKEN={}
+USERS=set()
 
 
 class OrderState(StatesGroup):
@@ -107,6 +108,8 @@ def client_confirm_kb(id):
 @dp.message(Command("start"))
 async def start(m:Message,state:FSMContext):
 
+ USERS.add(m.from_user.id)
+
  await state.clear()
 
  if m.from_user.id==ADMIN_ID:
@@ -175,6 +178,10 @@ async def region(m:Message,state:FSMContext):
 @dp.message(OrderState.dom)
 async def dom(m:Message,state:FSMContext):
 
+ if not m.text.isdigit():
+  await m.answer("❌ Faqat raqam kiriting")
+  return
+
  await state.update_data(dom=m.text)
  await state.set_state(OrderState.padez)
 
@@ -183,6 +190,10 @@ async def dom(m:Message,state:FSMContext):
 
 @dp.message(OrderState.padez)
 async def padez(m:Message,state:FSMContext):
+
+ if not m.text.isdigit():
+  await m.answer("❌ Faqat raqam kiriting")
+  return
 
  await state.update_data(padez=m.text)
 
@@ -224,6 +235,10 @@ async def location(m:Message,state:FSMContext):
 @dp.message(OrderState.kg)
 async def kg(m:Message,state:FSMContext):
 
+ if not m.text.replace(".","").isdigit():
+  await m.answer("❌ Faqat raqam")
+  return
+
  await state.update_data(kg=float(m.text))
 
  await state.set_state(OrderState.salad)
@@ -233,6 +248,10 @@ async def kg(m:Message,state:FSMContext):
 
 @dp.message(OrderState.salad)
 async def salad(m:Message,state:FSMContext):
+
+ if not m.text.isdigit():
+  await m.answer("❌ Faqat raqam")
+  return
 
  await state.update_data(salad_qty=int(m.text))
 
@@ -265,14 +284,10 @@ async def payment(m:Message,state:FSMContext):
  text=f"""
 📦 Zakaz №{ORDER_ID}
 
-👤 Mijoz ID: {m.from_user.id}
-
 📞 {data['phone']}
-
 📍 {data['region']}
-
-🏢 Dom:{data['dom']}
-🚪 Padez:{data['padez']}
+🏢 {data['dom']}
+🚪 {data['padez']}
 
 ⚖ {data['kg']}kg
 🥗 {data['salad_qty']}
@@ -300,7 +315,7 @@ async def yes(call:CallbackQuery,state:FSMContext):
 
  CLIENTS[data["id"]]=data["user_id"]
 
- await call.message.edit_text("✅ Buyurtmangiz tasdiqlandi")
+ await call.message.edit_text("✅ Tasdiqlandi")
 
  if data["payment"]=="💳 Karta":
 
@@ -310,7 +325,6 @@ async def yes(call:CallbackQuery,state:FSMContext):
    f"💳 Karta\n{CARD_NUMBER}\nChek yuboring"
   )
 
-  asyncio.create_task(cancel_5min(data["id"]))
   return
 
  await send_admin(state)
@@ -321,43 +335,68 @@ async def no(call:CallbackQuery,state:FSMContext):
 
  await call.answer()
 
- await call.message.edit_text("❌ Buyurtma bekor qilindi")
+ await call.message.edit_text("❌ Bekor qilindi")
 
  await state.clear()
 
 
-async def cancel_5min(id):
+@dp.message(OrderState.receipt,F.photo)
+async def receipt(m:Message,state:FSMContext):
 
- await asyncio.sleep(300)
+ data=await state.get_data()
 
- if id not in CLIENTS:
-  return
+ lat,lon=data["location"]
 
- user=CLIENTS[id]
+ await m.answer("✅ Chek yuborildi\nAdmin tekshiryapdi kuting")
 
- await bot.send_message(user,"❌ 5 minut chek kelmadi bekor")
+ text=f"""
+💳 CHEK №{data['id']}
+
+📞 {data['phone']}
+
+📍 {data['region']}
+🏢 {data['dom']}
+🚪 {data['padez']}
+
+⚖ {data['kg']}kg
+🥗 {data['salad_qty']}
+
+💰 {data['total']}
+
+https://maps.google.com/?q={lat},{lon}
+"""
+
+ await bot.send_photo(
+ ADMIN_ID,
+ m.photo[-1].file_id,
+ caption=text,
+ reply_markup=admin_confirm_kb(data['id'])
+ )
+
+ await state.clear()
 
 
 async def send_admin(state):
 
  data=await state.get_data()
 
+ lat,lon=data["location"]
+
  text=f"""
 🆕 Zakaz №{data['id']}
-
-👤 Mijoz ID: {data['user_id']}
 
 📞 {data['phone']}
 
 📍 {data['region']}
-
-🏢 Dom:{data['dom']}
-🚪 Padez:{data['padez']}
+🏢 {data['dom']}
+🚪 {data['padez']}
 
 ⚖ {data['kg']}kg
 🥗 {data['salad_qty']}
 
 💰 {data['total']}
+
+https://maps.google.com/?q={lat},{lon}
 """
 
  await bot.send_message(
@@ -376,23 +415,12 @@ async def admin_yes(call:CallbackQuery):
 
  id=int(call.data.split("_")[2])
 
- text=call.message.text
-
  for c in COURIERS:
 
   await bot.send_message(
    c,
-   text,
+   f"🚚 Zakaz №{id}",
    reply_markup=courier_kb(id)
-  )
-
- user_id=CLIENTS.get(id)
-
- if user_id:
-
-  await bot.send_message(
-   user_id,
-   "✅ Buyurtmangiz tasdiqlandi\n🚚 Tez orada yetkaziladi"
   )
 
  await call.message.edit_text("✅ Tasdiqlandi")
@@ -411,7 +439,7 @@ async def admin_no(call:CallbackQuery):
 
   await bot.send_message(
    user_id,
-   "❌ Buyurtmangiz bekor qilindi"
+   "❌ Buyurtma bekor qilindi"
   )
 
  await call.message.edit_text("❌ Bekor qilindi")
@@ -423,12 +451,6 @@ async def take(call:CallbackQuery):
  await call.answer()
 
  id=int(call.data.split("_")[1])
-
- if id in TAKEN:
-  await call.answer("Band")
-  return
-
- TAKEN[id]=call.from_user.id
 
  await call.message.edit_reply_markup(
  reply_markup=done_kb(id)
@@ -496,12 +518,36 @@ async def daily_report():
  await bot.send_document(ADMIN_ID,open(file,"rb"))
 
 
+async def reklam():
+
+ while True:
+
+  now=datetime.now()
+
+  if now.hour==20 and now.minute==0:
+
+   for u in USERS:
+
+    try:
+     await bot.send_message(
+     u,
+     "🍽 Ertaga osh bo'ladi\nZakaz berishni unutmang\n/start"
+     )
+    except:
+     pass
+
+   await asyncio.sleep(60)
+
+  await asyncio.sleep(20)
+
+
 async def main():
 
  await bot.delete_webhook(drop_pending_updates=True)
 
- await dp.start_polling(bot)
+ asyncio.create_task(reklam())
 
+ await dp.start_polling(bot)
 
 
 if __name__=="__main__":
