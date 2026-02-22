@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import sqlite3
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, F
@@ -31,9 +30,9 @@ logging.basicConfig(level=logging.INFO)
 bot=Bot(TOKEN)
 dp=Dispatcher(storage=MemoryStorage())
 
-
 CLIENTS={}
 CLIENT_RATING={}
+USERS=set()
 
 DAILY_STATS={
  "orders":0,
@@ -55,14 +54,12 @@ class OrderState(StatesGroup):
  receipt=State()
 
 
-
 def main_menu():
 
  kb=ReplyKeyboardBuilder()
  kb.add(KeyboardButton(text="🛒 Buyurtma berish"))
 
  return kb.as_markup(resize_keyboard=True)
-
 
 
 def admin_menu():
@@ -75,7 +72,6 @@ def admin_menu():
  return kb.as_markup(resize_keyboard=True)
 
 
-
 def region_kb():
 
  kb=ReplyKeyboardBuilder()
@@ -84,7 +80,6 @@ def region_kb():
  kb.adjust(2)
 
  return kb.as_markup()
-
 
 
 def payment_kb():
@@ -97,7 +92,6 @@ def payment_kb():
  return kb.as_markup()
 
 
-
 def admin_confirm_kb(id):
 
  kb=InlineKeyboardBuilder()
@@ -108,33 +102,24 @@ def admin_confirm_kb(id):
  return kb.as_markup()
 
 
-
 def courier_kb(id):
 
  kb=InlineKeyboardBuilder()
-
  kb.button(text="🚚 Qabul qilish",callback_data=f"take_{id}")
-
  return kb.as_markup()
-
 
 
 def done_kb(id):
 
  kb=InlineKeyboardBuilder()
-
  kb.button(text="✅ Yetkazildi",callback_data=f"done_{id}")
-
  return kb.as_markup()
-
 
 
 def client_confirm_kb(id):
 
  kb=InlineKeyboardBuilder()
-
  kb.button(text="✅ Oldim",callback_data=f"oldim_{id}")
-
  return kb.as_markup()
 
 
@@ -143,7 +128,6 @@ def client_confirm_kb(id):
 async def start(m:Message):
 
  if m.from_user.id==ADMIN_ID:
-
   await m.answer("Admin panel",reply_markup=admin_menu())
   return
 
@@ -159,17 +143,14 @@ async def start(m:Message):
  await m.answer(text,reply_markup=main_menu())
 
 
-
 @dp.message(F.text=="🟢 START")
 async def start_osh(m:Message):
 
  global OSH_OPEN
 
  if m.from_user.id==ADMIN_ID:
-
   OSH_OPEN=True
   await m.answer("🟢 Osh ochildi")
-
 
 
 @dp.message(F.text=="🔴 STOP")
@@ -187,28 +168,22 @@ async def stop_osh(m:Message):
 📊 Kunlik hisobot
 
 📦 Buyurtmalar: {DAILY_STATS['orders']}
-
 ❌ Bekor qilingan: {DAILY_STATS['cancel']}
-
 💰 Jami tushum: {DAILY_STATS['sum']}
 """
 
   await m.answer(text)
 
 
-
 @dp.message(F.text=="🛒 Buyurtma berish")
 async def order(m:Message,state:FSMContext):
 
  if not OSH_OPEN:
-
   await m.answer("❌ Osh yopiq")
   return
 
  await state.set_state(OrderState.region)
-
  await m.answer("📍 Hudud:",reply_markup=region_kb())
-
 
 
 @dp.message(OrderState.region)
@@ -221,7 +196,6 @@ async def region(m:Message,state:FSMContext):
  await m.answer("🏢 Dom:",reply_markup=ReplyKeyboardRemove())
 
 
-
 @dp.message(OrderState.dom)
 async def dom(m:Message,state:FSMContext):
 
@@ -230,7 +204,6 @@ async def dom(m:Message,state:FSMContext):
  await state.set_state(OrderState.padez)
 
  await m.answer("🚪 Padez:")
-
 
 
 @dp.message(OrderState.padez)
@@ -244,7 +217,6 @@ async def padez(m:Message,state:FSMContext):
  await state.set_state(OrderState.phone)
 
  await m.answer("📞 Telefon:",reply_markup=kb.as_markup(resize_keyboard=True))
-
 
 
 @dp.message(OrderState.phone)
@@ -262,18 +234,16 @@ async def phone(m:Message,state:FSMContext):
  await m.answer("📍 Lokatsiya:",reply_markup=kb.as_markup(resize_keyboard=True))
 
 
-
 @dp.message(OrderState.location)
 async def location(m:Message,state:FSMContext):
 
- loc=f"{m.location.latitude},{m.location.longitude}"
+ loc=f"https://maps.google.com/?q={m.location.latitude},{m.location.longitude}"
 
  await state.update_data(location=loc)
 
  await state.set_state(OrderState.kg)
 
  await m.answer(f"⚖ Necha kg?\n1 kg = {OSHKG_PRICE}")
-
 
 
 @dp.message(OrderState.kg)
@@ -283,8 +253,7 @@ async def kg(m:Message,state:FSMContext):
 
  await state.set_state(OrderState.salad)
 
- await m.answer(f"🥗 Salat nechta?\n1 ta = {SALAD_PRICE}\nHa 2 yoki Yo'q")
-
+ await m.answer(f"🥗 Salat nechta?\nHa 2 yoki Yo'q")
 
 
 @dp.message(OrderState.salad)
@@ -300,7 +269,6 @@ async def salad(m:Message,state:FSMContext):
  await state.set_state(OrderState.payment)
 
  await m.answer("💰 To'lov:",reply_markup=payment_kb())
-
 
 
 @dp.message(OrderState.payment)
@@ -321,12 +289,11 @@ async def payment(m:Message,state:FSMContext):
 📦 Buyurtma №{ORDER_ID}
 
 📍 {data['region']}
-
 🏢 Dom:{data['dom']}
 🚪 Padez:{data['padez']}
 
-⚖ {data['kg']}kg × {OSHKG_PRICE}
-🥗 {data['salad_qty']}ta × {SALAD_PRICE}
+⚖ {data['kg']}kg
+🥗 {data['salad_qty']}ta
 
 💰 {total}
 
@@ -336,12 +303,10 @@ Tasdiqlaysizmi?
  ORDER_ID+=1
 
  kb=InlineKeyboardBuilder()
-
  kb.button(text="✅ Tasdiqlash",callback_data="yes")
  kb.button(text="❌ Bekor",callback_data="no")
 
  await m.answer(text,reply_markup=kb.as_markup())
-
 
 
 @dp.callback_query(F.data=="yes")
@@ -363,7 +328,6 @@ async def yes(call:CallbackQuery,state:FSMContext):
  await send_admin(call,state,"❌ To'lanmagan")
 
 
-
 @dp.callback_query(F.data=="no")
 async def cancel(call:CallbackQuery,state:FSMContext):
 
@@ -376,8 +340,6 @@ async def cancel(call:CallbackQuery,state:FSMContext):
  await call.answer()
 
 
-
-# ADMIN BEKOR + MIJOZGA HABAR
 @dp.callback_query(F.data.startswith("admin_no"))
 async def admin_no(call:CallbackQuery):
 
@@ -388,6 +350,7 @@ async def admin_no(call:CallbackQuery):
  user_id=CLIENTS.get(id)
 
  if user_id:
+
   await bot.send_message(
   user_id,
   "❌ Buyurtmangiz admin tomonidan bekor qilindi"
@@ -399,50 +362,11 @@ async def admin_no(call:CallbackQuery):
 
 
 
-@dp.message(OrderState.receipt,F.photo)
-async def receipt(m:Message,state:FSMContext):
-
- data=await state.get_data()
-
- username=m.from_user.username
- user=f"@{username}" if username else m.from_user.first_name
-
- text=f"""
-🆕 Zakaz №{data['id']}
-
-👤 {user}
-
-📞 {data['phone']}
-
-📍 {data['region']}
-
-🏢 Dom:{data['dom']}
-🚪 Padez:{data['padez']}
-
-⚖ {data['kg']}kg
-🥗 {data['salad_qty']}
-
-💰 {data['total']}
-
-✅ To'langan
-"""
-
- await bot.send_photo(
- ADMIN_ID,
- m.photo[-1].file_id,
- caption=text,
- reply_markup=admin_confirm_kb(data['id'])
- )
-
- await m.answer("✅ Chek adminga yuborildi")
-
- await state.clear()
-
-
-
 async def send_admin(obj,state,pay):
 
  data=await state.get_data()
+
+ USERS.add(data["user_id"])
 
  username=obj.from_user.username
  user=f"@{username}" if username else obj.from_user.first_name
@@ -458,6 +382,9 @@ async def send_admin(obj,state,pay):
 
 🏢 Dom:{data['dom']}
 🚪 Padez:{data['padez']}
+
+📍 Lokatsiya
+{data['location']}
 
 ⚖ {data['kg']}kg
 🥗 {data['salad_qty']}
@@ -481,7 +408,6 @@ async def send_admin(obj,state,pay):
  await state.clear()
 
 
-
 @dp.callback_query(F.data.startswith("admin_yes"))
 async def admin_yes(call:CallbackQuery):
 
@@ -500,7 +426,6 @@ async def admin_yes(call:CallbackQuery):
  await call.answer("Kuriyerlarga yuborildi")
 
 
-
 @dp.callback_query(F.data.startswith("take_"))
 async def take(call:CallbackQuery):
 
@@ -515,11 +440,12 @@ async def take(call:CallbackQuery):
  )
 
 
-
 @dp.callback_query(F.data.startswith("done_"))
 async def done(call:CallbackQuery):
 
  id=int(call.data.split("_")[1])
+
+ await call.message.edit_reply_markup()
 
  user_id=CLIENTS.get(id)
 
@@ -532,14 +458,12 @@ async def done(call:CallbackQuery):
   )
 
 
-
 @dp.callback_query(F.data.startswith("oldim_"))
 async def oldim(call:CallbackQuery):
 
  CLIENT_RATING[call.from_user.id]=True
 
  await call.message.answer("⭐ Baholang 1-5")
-
 
 
 @dp.message(F.text.in_(["1","2","3","4","5"]))
@@ -552,13 +476,45 @@ async def rating(m:Message):
   del CLIENT_RATING[m.from_user.id]
 
 
+async def reminder_22():
+
+ while True:
+
+  now=datetime.now()
+
+  if now.hour==22 and now.minute==0:
+
+   kb=ReplyKeyboardBuilder()
+
+   kb.add(KeyboardButton(text="✅ Ha buyurtma beraman"))
+   kb.add(KeyboardButton(text="❌ Yo'q"))
+
+   kb.adjust(1)
+
+   for user in USERS:
+
+    try:
+
+     await bot.send_message(
+      user,
+      "🍚 Ertaga yana buyurtma berasizmi?",
+      reply_markup=kb.as_markup(resize_keyboard=True)
+     )
+    except:
+     pass
+
+   await asyncio.sleep(60)
+
+  await asyncio.sleep(20)
+
 
 async def main():
 
  await bot.delete_webhook(drop_pending_updates=True)
 
- await dp.start_polling(bot)
+ asyncio.create_task(reminder_22())
 
+ await dp.start_polling(bot)
 
 
 if __name__=="__main__":
