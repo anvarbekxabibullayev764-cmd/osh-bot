@@ -35,6 +35,12 @@ dp=Dispatcher(storage=MemoryStorage())
 CLIENTS={}
 CLIENT_RATING={}
 
+DAILY_STATS={
+ "orders":0,
+ "sum":0,
+ "cancel":0
+}
+
 
 class OrderState(StatesGroup):
 
@@ -139,9 +145,7 @@ async def start(m:Message):
  if m.from_user.id==ADMIN_ID:
 
   await m.answer("Admin panel",reply_markup=admin_menu())
-
   return
-
 
  text=f"""
 🍽 Gulobod osh bot
@@ -164,7 +168,6 @@ async def start_osh(m:Message):
  if m.from_user.id==ADMIN_ID:
 
   OSH_OPEN=True
-
   await m.answer("🟢 Osh ochildi")
 
 
@@ -178,7 +181,19 @@ async def stop_osh(m:Message):
 
   OSH_OPEN=False
 
-  await m.answer("🔴 Osh yopildi")
+  text=f"""
+🔴 Osh yopildi
+
+📊 Kunlik hisobot
+
+📦 Buyurtmalar: {DAILY_STATS['orders']}
+
+❌ Bekor qilingan: {DAILY_STATS['cancel']}
+
+💰 Jami tushum: {DAILY_STATS['sum']}
+"""
+
+  await m.answer(text)
 
 
 
@@ -188,9 +203,7 @@ async def order(m:Message,state:FSMContext):
  if not OSH_OPEN:
 
   await m.answer("❌ Osh yopiq")
-
   return
-
 
  await state.set_state(OrderState.region)
 
@@ -226,7 +239,6 @@ async def padez(m:Message,state:FSMContext):
  await state.update_data(padez=m.text)
 
  kb=ReplyKeyboardBuilder()
-
  kb.add(KeyboardButton(text="📱 Raqam",request_contact=True))
 
  await state.set_state(OrderState.phone)
@@ -243,7 +255,6 @@ async def phone(m:Message,state:FSMContext):
  await state.update_data(phone=phone)
 
  kb=ReplyKeyboardBuilder()
-
  kb.add(KeyboardButton(text="📍 Lokatsiya",request_location=True))
 
  await state.set_state(OrderState.location)
@@ -282,9 +293,7 @@ async def salad(m:Message,state:FSMContext):
  qty=0
 
  if "ha" in m.text.lower():
-
   qty=int(m.text.split()[1])
-
 
  await state.update_data(salad_qty=qty)
 
@@ -302,14 +311,11 @@ async def payment(m:Message,state:FSMContext):
  data=await state.get_data()
 
  osh=int(data["kg"]*OSHKG_PRICE)
-
  salat=int(data["salad_qty"]*SALAD_PRICE)
 
  total=osh+salat
 
-
  await state.update_data(total=total,payment=m.text,id=ORDER_ID,user_id=m.from_user.id)
-
 
  text=f"""
 📦 Buyurtma №{ORDER_ID}
@@ -329,12 +335,10 @@ Tasdiqlaysizmi?
 
  ORDER_ID+=1
 
-
  kb=InlineKeyboardBuilder()
 
  kb.button(text="✅ Tasdiqlash",callback_data="yes")
  kb.button(text="❌ Bekor",callback_data="no")
-
 
  await m.answer(text,reply_markup=kb.as_markup())
 
@@ -349,17 +353,38 @@ async def yes(call:CallbackQuery,state:FSMContext):
 
  await call.message.answer("✅ Buyurtma tasdiqlandi")
 
-
  if data["payment"]=="💳 Karta":
 
   await state.set_state(OrderState.receipt)
 
   await call.message.answer(f"Karta\n{CARD_NUMBER}\nChek yuboring")
-
   return
 
-
  await send_admin(call,state,"❌ To'lanmagan")
+
+
+
+@dp.callback_query(F.data=="no")
+async def cancel(call:CallbackQuery,state:FSMContext):
+
+ DAILY_STATS["cancel"]+=1
+
+ await call.message.answer("❌ Buyurtma bekor qilindi")
+
+ await state.clear()
+
+ await call.answer()
+
+
+
+@dp.callback_query(F.data.startswith("admin_no"))
+async def admin_no(call:CallbackQuery):
+
+ DAILY_STATS["cancel"]+=1
+
+ await call.message.answer("❌ Buyurtma admin tomonidan bekor qilindi")
+
+ await call.answer()
 
 
 
@@ -369,12 +394,7 @@ async def receipt(m:Message,state:FSMContext):
  data=await state.get_data()
 
  username=m.from_user.username
-
- if username:
-  user=f"@{username}"
- else:
-  user=m.from_user.first_name
-
+ user=f"@{username}" if username else m.from_user.first_name
 
  text=f"""
 🆕 Zakaz №{data['id']}
@@ -396,19 +416,12 @@ async def receipt(m:Message,state:FSMContext):
 ✅ To'langan
 """
 
-
  await bot.send_photo(
-
  ADMIN_ID,
-
  m.photo[-1].file_id,
-
  caption=text,
-
  reply_markup=admin_confirm_kb(data['id'])
-
  )
-
 
  await m.answer("✅ Chek adminga yuborildi")
 
@@ -420,17 +433,8 @@ async def send_admin(obj,state,pay):
 
  data=await state.get_data()
 
-
  username=obj.from_user.username
-
- if username:
-
-  user=f"@{username}"
-
- else:
-
-  user=obj.from_user.first_name
-
+ user=f"@{username}" if username else obj.from_user.first_name
 
  text=f"""
 🆕 Zakaz №{data['id']}
@@ -452,17 +456,14 @@ async def send_admin(obj,state,pay):
 {pay}
 """
 
-
  await bot.send_message(
-
  ADMIN_ID,
-
  text,
-
  reply_markup=admin_confirm_kb(data['id'])
-
  )
 
+ DAILY_STATS["orders"]+=1
+ DAILY_STATS["sum"]+=data["total"]
 
  await obj.answer("Admin kutmoqda")
 
@@ -477,19 +478,13 @@ async def admin_yes(call:CallbackQuery):
 
  text=call.message.text
 
-
  for c in COURIERS:
 
   await bot.send_message(
-
   c,
-
   text,
-
   reply_markup=courier_kb(id)
-
   )
-
 
  await call.answer("Kuriyerlarga yuborildi")
 
@@ -500,18 +495,12 @@ async def take(call:CallbackQuery):
 
  id=int(call.data.split("_")[1])
 
-
  await call.message.answer(
-
  f"🚚 Kuriyer {call.from_user.first_name} zakazni oldi"
-
  )
 
-
  await call.message.edit_reply_markup(
-
  reply_markup=done_kb(id)
-
  )
 
 
@@ -523,17 +512,12 @@ async def done(call:CallbackQuery):
 
  user_id=CLIENTS.get(id)
 
-
  if user_id:
 
   await bot.send_message(
-
   user_id,
-
   "Zakazni oldingizmi?",
-
   reply_markup=client_confirm_kb(id)
-
   )
 
 
