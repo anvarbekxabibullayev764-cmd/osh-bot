@@ -377,10 +377,21 @@ async def cancel(call:CallbackQuery,state:FSMContext):
 
 
 
+# ADMIN BEKOR + MIJOZGA HABAR
 @dp.callback_query(F.data.startswith("admin_no"))
 async def admin_no(call:CallbackQuery):
 
+ id=int(call.data.split("_")[2])
+
  DAILY_STATS["cancel"]+=1
+
+ user_id=CLIENTS.get(id)
+
+ if user_id:
+  await bot.send_message(
+  user_id,
+  "❌ Buyurtmangiz admin tomonidan bekor qilindi"
+  )
 
  await call.message.answer("❌ Buyurtma admin tomonidan bekor qilindi")
 
