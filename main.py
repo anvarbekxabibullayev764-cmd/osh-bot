@@ -97,7 +97,7 @@ async def check(call: types.CallbackQuery):
         )
         await call.message.answer("Instagramga ham obuna bo‘ldingizmi?", reply_markup=kb)
     else:
-        await call.answer("❌ Avval Telegramga obuna bo‘ling!", show_alert=True)
+        await call.answer("❌ Avval Telegram va instagramga obuna bo‘ling!", show_alert=True)
 
 
 # 🎉 Sertifikat
