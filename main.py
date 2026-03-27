@@ -49,8 +49,9 @@ async def check_sub(user_id):
             member = await bot.get_chat_member(ch, user_id)
             if member.status not in ["member", "administrator", "creator"]:
                 return False
-        except:
-            return False
+except Exception as e:
+    print(e)
+    return False
     return True
 
 
