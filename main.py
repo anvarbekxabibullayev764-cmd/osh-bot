@@ -11,12 +11,9 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from PIL import Image, ImageDraw, ImageFont
 
-# 🔐 TOKEN
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# 🔐 TOKEN (qo‘lda yoz tavsiya)
+BOT_TOKEN = "TOKENINGNI_BU_YERGA_YOZ"
 ADMIN_ID = 5915034478
-
-if not BOT_TOKEN:
-    raise Exception("BOT_TOKEN topilmadi")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,12 +39,12 @@ class Form(StatesGroup):
 
 # 📂 TEMPLATE
 TEMPLATES = {
-    "sert1": {"file": "data/template1.png", "x": 750, "y": 470, "size": 90},
-    "sert2": {"file": "data/template2.png", "x": 750, "y": 520, "size": 80},
-    "sert3": {"file": "data/template3.png", "x": 750, "y": 500, "size": 80},
-    "sert4": {"file": "data/template4.png", "x": 750, "y": 540, "size": 80},
-    "sert5": {"file": "data/template5.png", "x": 750, "y": 520, "size": 80},
-    "sert6": {"file": "data/template6.png", "x": 750, "y": 530, "size": 80},
+    "sert1": {"file": "data/template1.png", "x": 750, "y": 430, "size": 60},
+    "sert2": {"file": "data/template2.png", "x": 750, "y": 500, "size": 80},
+    "sert3": {"file": "data/template3.png", "x": 750, "y": 480, "size": 75},
+    "sert4": {"file": "data/template4.png", "x": 750, "y": 520, "size": 75},
+    "sert5": {"file": "data/template5.png", "x": 750, "y": 500, "size": 70},
+    "sert6": {"file": "data/template6.png", "x": 750, "y": 510, "size": 70},
 }
 
 # 🔘 START MENU
@@ -76,28 +73,39 @@ async def check_sub(user_id):
 def generate_certificate(name, cert_type):
     config = TEMPLATES[cert_type]
 
+    if not os.path.exists(config["file"]):
+        raise Exception(f"{cert_type} template topilmadi")
+
+    os.makedirs("data", exist_ok=True)
+
     img = Image.open(config["file"]).convert("RGB")
     draw = ImageDraw.Draw(img)
 
+    safe_name = "".join(c for c in name if c.isalnum() or c in " _-")
+
     size = config["size"]
 
-    # 🔽 avtomatik kichraytirish
     while size > 30:
-        font = ImageFont.truetype("data/font.ttf", size)
-        w, h = draw.textbbox((0, 0), name, font=font)[2:]
-        if w < 1200:
+        try:
+            font = ImageFont.truetype("data/font.ttf", size)
+        except:
+            font = ImageFont.load_default()
+
+        w, h = draw.textbbox((0, 0), safe_name, font=font)[2:]
+
+        if w < img.size[0] - 200:
             break
         size -= 2
 
     draw.text(
         (config["x"], config["y"]),
-        name,
+        safe_name,
         fill="black",
         font=font,
         anchor="mm"
     )
 
-    file_path = f"data/{name}_{cert_type}.png"
+    file_path = f"data/{safe_name}_{cert_type}.png"
     img.save(file_path)
 
     return file_path
@@ -107,10 +115,9 @@ def generate_certificate(name, cert_type):
 async def start(msg: types.Message):
     await msg.answer("👇 Avval obuna bo‘ling:", reply_markup=keyboard())
 
-# 📸 INSTAGRAM KO‘RSATISH
+# 📸 INSTAGRAM
 @dp.callback_query_handler(lambda c: c.data == "insta")
 async def show_insta(call: types.CallbackQuery):
-
     kb = InlineKeyboardMarkup(row_width=1)
 
     for link in INSTAGRAM_LINKS:
@@ -133,26 +140,24 @@ async def check(call: types.CallbackQuery):
 
         kb.add(InlineKeyboardButton("✅ Tasdiqlayman", callback_data="confirm"))
 
-        await call.message.edit_text(
-            "📸 Instagramlarni ham ko‘rib chiqing:",
-            reply_markup=kb
-        )
+        await call.message.edit_text("📸 Instagramlarni ham ko‘rib chiqing:", reply_markup=kb)
     else:
-        await call.answer("❌ Avval kanallarga obuna bo‘ling!", show_alert=True)
-      # 🎉 CONFIRM → ISM
+        await call.answer("❌ Avval obuna bo‘ling!", show_alert=True)
+
+# 🎉 CONFIRM
 @dp.callback_query_handler(lambda c: c.data == "confirm")
 async def ask_name(call: types.CallbackQuery):
     await Form.name.set()
     await call.message.answer("✍️ Ism va familiyangizni yozing:")
 
-# ✍️ ISM → 6 TA SERT
+# ✍️ ISM
 @dp.message_handler(state=Form.name)
 async def get_name(msg: types.Message, state: FSMContext):
 
     name = msg.text.strip()
 
     if len(name) < 5 or " " not in name:
-        return await msg.answer("❗️ To‘liq ism yozing (Ali Valiyev)")
+        return await msg.answer("❗ To‘liq ism yozing (Ali Valiyev)")
 
     name = name[:40]
 
@@ -161,38 +166,13 @@ async def get_name(msg: types.Message, state: FSMContext):
             cert = generate_certificate(name, cert_type)
 
             with open(cert, "rb") as photo:
-                await bot.send_photo(
-                    msg.from_user.id,
-                    photo,
-                    caption=f"🎉 {cert_type} tayyor!"
-                )
+                await bot.send_photo(msg.from_user.id, photo)
 
     except Exception as e:
-        await msg.answer(f"❗️ Xato: {e}")
+        await msg.answer(f"❗ Xato: {e}")
 
     await state.finish()
 
-# 🖼 ADMIN TEMPLATE
-template_index = 1
-
-@dp.message_handler(content_types=['photo'])
-async def upload(msg: types.Message):
-    global template_index
-
-    if msg.from_user.id != ADMIN_ID:
-        return
-
-    os.makedirs("data", exist_ok=True)
-
-    if template_index > 6:
-        template_index = 1
-
-    path = f"data/template{template_index}.png"
-    await msg.photo[-1].download(destination_file=path)
-
-    await msg.answer(f"✅ template{template_index} saqlandi")
-    template_index += 1
-
 # ▶️ RUN
-if name == "main":
+if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
