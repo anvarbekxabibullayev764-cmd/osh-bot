@@ -40,14 +40,14 @@ INSTAGRAM_LINKS = [
 class Form(StatesGroup):
     name = State()
 
-# 📂 6 TA TEMPLATE
+# 📂 TEMPLATE (markaz koordinata)
 TEMPLATES = {
     "sert1": {"file": "data/template1.png", "x": 750, "y": 470, "size": 90},
-    "sert2": {"file": "data/template2.png", "x": 500, "y": 600, "size": 70},
-    "sert3": {"file": "data/template3.png", "x": 650, "y": 500, "size": 75},
-    "sert4": {"file": "data/template4.png", "x": 700, "y": 550, "size": 65},
-    "sert5": {"file": "data/template5.png", "x": 600, "y": 580, "size": 70},
-    "sert6": {"file": "data/template6.png", "x": 650, "y": 650, "size": 60},
+    "sert2": {"file": "data/template2.png", "x": 750, "y": 520, "size": 80},
+    "sert3": {"file": "data/template3.png", "x": 750, "y": 500, "size": 80},
+    "sert4": {"file": "data/template4.png", "x": 750, "y": 540, "size": 80},
+    "sert5": {"file": "data/template5.png", "x": 750, "y": 520, "size": 80},
+    "sert6": {"file": "data/template6.png", "x": 750, "y": 530, "size": 80},
 }
 
 # 🔘 START MENU
@@ -84,7 +84,6 @@ def generate_certificate(name, cert_type):
     img = Image.open(config["file"]).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # 🔧 FONT FIX (MUHIM QISM)
     try:
         font = ImageFont.truetype("data/font.ttf", config["size"])
     except:
@@ -92,7 +91,14 @@ def generate_certificate(name, cert_type):
 
     safe_name = "".join(c for c in name if c.isalnum() or c in " _-")
 
-    draw.text((config["x"], config["y"]), safe_name, fill="black", font=font)
+    # 🎯 MARKAZGA YOZISH
+    draw.text(
+        (config["x"], config["y"]),
+        safe_name,
+        fill="black",
+        font=font,
+        anchor="mm"
+    )
 
     file_path = f"data/{safe_name}_{cert_type}.png"
     img.save(file_path)
@@ -114,7 +120,10 @@ async def check(call: types.CallbackQuery):
             InlineKeyboardButton("✅ Tasdiqlayman", callback_data="confirm")
         )
 
-        await call.message.edit_text("📸 Instagramni ham ko‘rib chiqing:", reply_markup=kb)
+        await call.message.edit_text("📸 Instagramni ham ko‘rib chiqing:"    
+                                     "https://www.instagram.com/o.o.olimmov",
+    "https://www.instagram.com/xdp.shayxontohur",
+    "https://www.instagram.com/anvarbek.xabibullayev", reply_markup=kb)
 
     else:
         await call.answer("❌ Avval obuna bo‘ling!", show_alert=True)
@@ -133,25 +142,32 @@ async def choose_cert(call: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data.startswith("sert"))
 async def ask_name(call: types.CallbackQuery, state: FSMContext):
 
-    await state.update_data(cert=call.data)
     await Form.name.set()
-
     await call.message.answer("✍️ Ism va familiyangizni yozing:")
 
-# ✍️ ISM → SERT
+# ✍️ ISM → 6 TA SERT
 @dp.message_handler(state=Form.name)
 async def get_name(msg: types.Message, state: FSMContext):
 
-    data = await state.get_data()
-    cert_type = data.get("cert")
+    name = msg.text.strip()
 
-    name = msg.text[:40]
+    # ❗ VALIDATSIYA
+    if len(name) < 5 or " " not in name:
+        return await msg.answer("❗ Ism va familiyani to‘liq yozing (masalan: Ali Valiyev)")
+
+    name = name[:40]
 
     try:
-        cert = generate_certificate(name, cert_type)
+        # 🔥 6 TA SERTNI BIRGA YUBORADI
+        for cert_type in TEMPLATES.keys():
+            cert = generate_certificate(name, cert_type)
 
-        with open(cert, "rb") as photo:
-            await bot.send_photo(msg.from_user.id, photo, caption="🎉 Sertifikat tayyor!")
+            with open(cert, "rb") as photo:
+                await bot.send_photo(
+                    msg.from_user.id,
+                    photo,
+                    caption=f"🎉 {cert_type} tayyor!"
+                )
 
     except Exception as e:
         await msg.answer(f"❗ Xato: {e}")
