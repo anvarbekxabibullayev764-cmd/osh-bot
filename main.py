@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = "TOKENINGNI_BU_YERGA_YOZ"   # ← O'zgartiring!
+BOT_TOKEN = "8736787100:AAGaJMulAr7bORxFP-J_pH2somGQPka17HE"   # ← O'zgartiring!
 ADMIN_ID = 5915034478
 
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
