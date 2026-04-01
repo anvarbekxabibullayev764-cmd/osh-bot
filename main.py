@@ -42,7 +42,7 @@ class Form(StatesGroup):
 
 # 📂 6 TA TEMPLATE
 TEMPLATES = {
-    "sert1": {"file": "data/template1.png", "x": 600, "y": 520, "size": 80},
+    "sert1": {"file": "data/template1.png", "x": 750, "y": 470, "size": 90},
     "sert2": {"file": "data/template2.png", "x": 500, "y": 600, "size": 70},
     "sert3": {"file": "data/template3.png", "x": 650, "y": 500, "size": 75},
     "sert4": {"file": "data/template4.png", "x": 700, "y": 550, "size": 65},
