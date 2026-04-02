@@ -21,9 +21,9 @@ dp = Dispatcher(bot, storage=storage)
 TELEGRAM_CHANNELS = ["@xdp_shayxontohur", "@olimmov_ozodbekk"]
 
 INSTAGRAM_LINKS = [
+    "https://www.instagram.com/anvarbek.xabibullayev",
     "https://www.instagram.com/o.o.olimmov",
-    "https://www.instagram.com/xdp.shayxontohur",
-    "https://www.instagram.com/anvarbek.xabibullayev"
+    "https://www.instagram.com/xdp.shayxontohur"
 ]
 
 # Yangi: Admin tomonidan yuklangan 6 ta template
@@ -92,7 +92,7 @@ def generate_certificate(name: str, template_key: str) -> str:
         anchor="mm"
     )
 
-    output_path = f"data/certificates/{safe_name}_{template_key}.png"
+    output_path = f"data/certificates/{safe_name}_{template_key}.jpg"
     img.save(output_path, optimize=True, quality=95)
     return output_path
 
