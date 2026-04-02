@@ -32,11 +32,11 @@ os.makedirs(CERT_DIR, exist_ok=True)
 
 TEMPLATES = {
     "template1": {"file": f"{TEMPLATE_DIR}/template1.png", "x": 350, "y": 530, "size": 90, "color": (0, 0, 0)},
-    "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 400, "y": 320, "size": 70, "color": (0, 51, 102)},
-    "template3": {"file": f"{TEMPLATE_DIR}/template3.png", "x": 650, "y": 680, "size": 55, "color": (0, 80, 0)},
-    "template4": {"file": f"{TEMPLATE_DIR}/template4.png", "x": 650, "y": 620, "size": 62, "color": (0, 100, 0)},
-    "template5": {"file": f"{TEMPLATE_DIR}/template5.png", "x": 420, "y": 520, "size": 80, "color": (0, 70, 0)},
-    "template6": {"file": f"{TEMPLATE_DIR}/template6.png", "x": 400, "y": 330, "size": 70, "color": (0, 0, 0)},
+    "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 400, "y": 310, "size": 70, "color": (0, 51, 102)},
+    "template3": {"file": f"{TEMPLATE_DIR}/template3.png", "x": 410, "y": 540, "size": 55, "color": (0, 80, 0)},
+    "template4": {"file": f"{TEMPLATE_DIR}/template4.png", "x": 420, "y": 520, "size": 62, "color": (0, 100, 0)},
+    "template5": {"file": f"{TEMPLATE_DIR}/template5.png", "x": 420, "y": 460, "size": 80, "color": (0, 70, 0)},
+    "template6": {"file": f"{TEMPLATE_DIR}/template6.png", "x": 400, "y": 340, "size": 70, "color": (0, 0, 0)},
 }
 
 class Form(StatesGroup):
