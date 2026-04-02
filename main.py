@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = "8736787100:AAGaJMulAr7bORxFP-J_pH2somGQPka17HE"  # ← O'zgartiring!
+BOT_TOKEN = "8736787100:AAGaJMulAr7bORxFP-J_pH2somGQPka17HE"
 ADMIN_ID = 5915034478
 
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
@@ -31,14 +31,14 @@ CERT_DIR = "data/certificates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 os.makedirs(CERT_DIR, exist_ok=True)
 
-# ================== TEMPLATES (faqat 6 ta) ==================
+# ================== TEMPLATES (Sizning rasm nomlaringizga moslashtirildi) ==================
 TEMPLATES = {
-    "sert1": {"file": f"{TEMPLATE_DIR}/sert1.png", "x": 650, "y": 520, "size": 58, "color": (0, 0, 0)},
-    "sert2": {"file": f"{TEMPLATE_DIR}/sert2.png", "x": 700, "y": 520, "size": 52, "color": (0, 51, 102)},
-    "sert3": {"file": f"{TEMPLATE_DIR}/sert3.png", "x": 650, "y": 680, "size": 55, "color": (0, 80, 0)},
-    "sert4": {"file": f"{TEMPLATE_DIR}/sert4.png", "x": 650, "y": 620, "size": 62, "color": (0, 100, 0)},
-    "sert5": {"file": f"{TEMPLATE_DIR}/sert5.png", "x": 650, "y": 720, "size": 60, "color": (0, 70, 0)},
-    "sert6": {"file": f"{TEMPLATE_DIR}/sert6.png", "x": 850, "y": 480, "size": 55, "color": (0, 0, 0)},
+    "template1": {"file": f"{TEMPLATE_DIR}/template1.png", "x": 650, "y": 520, "size": 58, "color": (0, 0, 0)},
+    "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 700, "y": 520, "size": 52, "color": (0, 51, 102)},
+    "template3": {"file": f"{TEMPLATE_DIR}/template3.png", "x": 650, "y": 680, "size": 55, "color": (0, 80, 0)},
+    "template4": {"file": f"{TEMPLATE_DIR}/template4.png", "x": 650, "y": 620, "size": 62, "color": (0, 100, 0)},
+    "template5": {"file": f"{TEMPLATE_DIR}/template5.png", "x": 650, "y": 720, "size": 60, "color": (0, 70, 0)},
+    "template6": {"file": f"{TEMPLATE_DIR}/template6.png", "x": 850, "y": 480, "size": 55, "color": (0, 0, 0)},
 }
 
 class Form(StatesGroup):
@@ -46,41 +46,49 @@ class Form(StatesGroup):
 
 # ================== SERTIFIKAT GENERATSIYA ==================
 def generate_certificate(name: str, template_key: str) -> str:
-    if template_key not in TEMPLATES:
-        raise Exception(f"Template {template_key} topilmadi")
-
-    config = TEMPLATES[template_key]
-    img = Image.open(config["file"]).convert("RGB")
-    draw = ImageDraw.Draw(img)
-
-    safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
-    font_path = "data/font.ttf"
-
-    font_size = config.get("size", 60)
-    color = config.get("color", (0, 0, 0))
-
     try:
-        font = ImageFont.truetype(font_path, font_size)
-    except Exception:
-        logging.warning(f"Font topilmadi: {font_path}. Default ishlatilmoqda.")
-        font = ImageFont.load_default()
+        if template_key not in TEMPLATES:
+            raise Exception(f"Template {template_key} topilmadi")
 
-    while font_size > 30:
-        bbox = draw.textbbox((0, 0), safe_name, font=font)
-        text_width = bbox[2] - bbox[0]
-        if text_width < img.size[0] - 200:
-            break
-        font_size -= 3
+        config = TEMPLATES[template_key]
+        
+        if not os.path.exists(config["file"]):
+            raise Exception(f"Rasm topilmadi: {config['file']}")
+
+        img = Image.open(config["file"]).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
+        font_path = "data/font.ttf"
+
+        font_size = config.get("size", 60)
+        color = config.get("color", (0, 0, 0))
+
         try:
             font = ImageFont.truetype(font_path, font_size)
         except Exception:
+            logging.warning("Font topilmadi, default ishlatilmoqda.")
             font = ImageFont.load_default()
 
-    draw.text((config["x"], config["y"]), safe_name, fill=color, font=font, anchor="mm")
+        while font_size > 30:
+            bbox = draw.textbbox((0, 0), safe_name, font=font)
+            if (bbox[2] - bbox[0]) < img.size[0] - 200:
+                break
+            font_size -= 3
+            try:
+                font = ImageFont.truetype(font_path, font_size)
+            except:
+                font = ImageFont.load_default()
 
-    output_path = f"{CERT_DIR}/{safe_name.replace(' ', '_')}_{template_key}.jpg"
-    img.save(output_path, optimize=True, quality=92)
-    return output_path
+        draw.text((config["x"], config["y"]), safe_name, fill=color, font=font, anchor="mm")
+
+        output_path = f"{CERT_DIR}/{safe_name.replace(' ', '_')}_{template_key}.jpg"
+        img.save(output_path, optimize=True, quality=92)
+        return output_path
+
+    except Exception as e:
+        logging.error(f"{template_key} yaratishda xatolik: {e}")
+        raise
 
 
 # ================== OBUna TEKSHIRISH ==================
@@ -108,22 +116,22 @@ async def cmd_start(message: types.Message):
         
         kb.add(InlineKeyboardButton("✅ Tekshirish", callback_data="check_sub"))
 
-        await message.answer("📢 **Obuna bo‘ling:**", reply_markup=kb)
+        await message.answer("📢 **Obuna bo‘ling:**\nTelegram kanallar va Instagram sahifalariga obuna bo‘ling.", 
+                           reply_markup=kb)
         return
 
-    # Obuna tasdiqlangan bo'lsa — ism so'raydi
     await message.answer("✍️ Iltimos, to‘liq ismingizni kiriting:")
     await Form.name.set()
 
 
-# ================== TEKSHIRISH TUGMASI ==================
+# ================== TEKSHIRISH ==================
 @dp.callback_query_handler(lambda c: c.data == "check_sub")
 async def check_sub_callback(callback: types.CallbackQuery, state: FSMContext):
     if await check_subscription(callback.from_user.id):
         await callback.message.edit_text("✅ Obuna tasdiqlandi!\n\n✍️ Endi to‘liq ismingizni kiriting:")
         await Form.name.set()
     else:
-        await callback.answer("❌ Hali ham barcha kanallarga obuna bo‘lmadingiz!", show_alert=True)
+        await callback.answer("❌ Hali ham Telegram kanallarga obuna bo‘lmadingiz!", show_alert=True)
     await callback.answer()
 
 
@@ -135,34 +143,49 @@ async def get_name(message: types.Message, state: FSMContext):
     await message.answer(f"⏳ {name} uchun 6 ta sertifikat tayyorlanmoqda...\nBiroz kuting...")
 
     success_count = 0
-    for template_key in ["sert1", "sert2", "sert3", "sert4", "sert5", "sert6"]:
+    for key in ["template1", "template2", "template3", "template4", "template5", "template6"]:
         try:
-            cert_path = generate_certificate(name, template_key)
+            cert_path = generate_certificate(name, key)
             
             with open(cert_path, "rb") as photo:
                 await bot.send_photo(
-                    chat_id=message.chat.id,
-                    photo=photo,
+                    message.chat.id,
+                    photo,
                     caption=f"✅ Sertifikat tayyor!\n"
                             f"👤 Ism: <b>{name}</b>\n"
-                            f"📜 Tur: {template_key}"
+                            f"📜 Tur: {key}"
                 )
             success_count += 1
         except Exception as e:
-            logging.error(f"{template_key} da xatolik: {e}")
-            await message.answer(f"❌ {template_key} yaratishda xatolik yuz berdi.")
+            await message.answer(f"❌ {key} yaratishda xatolik yuz berdi.")
 
     await message.answer(f"🎉 Hammasi tugadi! Jami {success_count} ta sertifikat yuborildi.")
     await state.finish()
 
 
-# ================== ADMIN BUYRUQLARI (o'zgarmadi) ==================
+# ================== ADMIN BUYRUQLARI ==================
 @dp.message_handler(commands=['addtemplate'], user_id=ADMIN_ID)
 async def add_template(msg: types.Message):
     if not msg.reply_to_message or not msg.reply_to_message.photo:
-        await msg.answer("❌ Sertifikat rasmini yuborib, /addtemplate ga reply qiling.")
+        await msg.answer("❌ Sertifikat rasmini reply qilib /addtemplate yozing.")
         return
-    # ... sizning eski kodingizdagi qolgan qismi
+
+    template_num = len(TEMPLATES) + 1
+    template_key = f"template{template_num}"
+    photo = msg.reply_to_message.photo[-1]
+    file_path = f"{TEMPLATE_DIR}/{template_key}.png"
+
+    await photo.download(destination_file=file_path)
+
+    TEMPLATES[template_key] = {
+        "file": file_path,
+        "x": 650,
+        "y": 550,
+        "size": 60,
+        "color": (0, 0, 0)
+    }
+
+    await msg.answer(f"✅ {template_key} qo‘shildi!\nPosition o‘zgartirish: /setpos {template_key} x y size")
 
 
 @dp.message_handler(commands=['setpos'], user_id=ADMIN_ID)
@@ -176,10 +199,10 @@ async def set_position(msg: types.Message):
         TEMPLATES[key].update({"x": x, "y": y, "size": size})
         await msg.answer(f"✅ {key} yangilandi:\nX: {x} | Y: {y} | Size: {size}")
     except:
-        await msg.answer("❌ Format: /setpos sert1 650 520 58")
+        await msg.answer("❌ Format: /setpos template1 650 520 58")
 
 
-# ================== BOTNI ISHGA TUSHIRISH ==================
+# ================== BOT ISHGA TUSHIRISH ==================
 if __name__ == "__main__":
-    print("✅ Bot ishga tushdi! Obuna bo‘lgandan keyin 6 ta sertifikat avtomatik yuboriladi.")
+    print("✅ Bot ishga tushdi! Rasmlar: template1.png - template6.png")
     executor.start_polling(dp, skip_updates=True)
