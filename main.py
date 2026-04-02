@@ -33,9 +33,9 @@ os.makedirs(CERT_DIR, exist_ok=True)
 TEMPLATES = {
     "template1": {"file": f"{TEMPLATE_DIR}/template1.png", "x": 350, "y": 530, "size": 90, "color": (0, 0, 0)},
     "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 400, "y": 315, "size": 70, "color": (0, 51, 102)},
-    "template3": {"file": f"{TEMPLATE_DIR}/template3.png", "x": 350, "y": 440, "size": 65, "color": (0, 80, 0)},
-    "template4": {"file": f"{TEMPLATE_DIR}/template4.png", "x": 420, "y": 360, "size": 82, "color": (0, 100, 0)},
-    "template5": {"file": f"{TEMPLATE_DIR}/template5.png", "x": 440, "y": 440, "size": 90, "color": (0, 70, 0)},
+    "template3": {"file": f"{TEMPLATE_DIR}/template3.png", "x": 340, "y": 450, "size": 65, "color": (0, 80, 0)},
+    "template4": {"file": f"{TEMPLATE_DIR}/template4.png", "x": 420, "y": 355, "size": 82, "color": (0, 100, 0)},
+    "template5": {"file": f"{TEMPLATE_DIR}/template5.png", "x": 445, "y": 445, "size": 90, "color": (0, 70, 0)},
     "template6": {"file": f"{TEMPLATE_DIR}/template6.png", "x": 400, "y": 340, "size": 90, "color": (0, 0, 0)},
 }
 
