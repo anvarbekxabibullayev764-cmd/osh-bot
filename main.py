@@ -27,7 +27,7 @@ INSTAGRAM_LINKS = [
 ]
 
 # Yangi: Admin tomonidan yuklangan template'lar
-TEMPLATES = {}  # { "sert1": {"file": "path", "x": 750, "y": 430, "size": 60}, ... }
+TEMPLATES = {}  # { "sert1": {"file": "path", "x": 380, "y": 520, "size": 60}, ... }
 TEMPLATE_DIR = "data/templates"
 
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
@@ -113,15 +113,15 @@ async def add_template(msg: types.Message):
 
     TEMPLATES[template_key] = {
         "file": file_path,
-        "x": 750,
-        "y": 480,
+        "x": 400,
+        "y": 500,
         "size": 70
     }
 
     await msg.answer(f"✅ {template_key} muvaffaqiyatli qo‘shildi!\n\n"
                      f"Koordinatalarni o‘zgartirish uchun:\n"
                      f"/setpos {template_key} x y size\n"
-                     f"Masalan: /setpos sert1 750 430 65")
+                     f"Masalan: /setpos sert1 400 500 65")
 
 # ================== ADMIN: POZITSIYA O'ZGARTIRISH ==================
 @dp.message_handler(commands=['setpos'], user_id=ADMIN_ID)
@@ -137,7 +137,7 @@ async def set_position(msg: types.Message):
         TEMPLATES[template_key].update({"x": x, "y": y, "size": size})
         await msg.answer(f"✅ {template_key} yangilandi:\nX: {x} | Y: {y} | Size: {size}")
     except:
-        await msg.answer("❌ Format xato!\nTo‘g‘ri: /setpos sert1 750 430 65")
+        await msg.answer("❌ Format xato!\nTo‘g‘ri: /setpos sert1 400 500 65")
 
 # ================== START ==================
 @dp.message_handler(commands=['start'])
@@ -212,8 +212,8 @@ if __name__ == "__main__":
             key = file.replace(".png", "")
             TEMPLATES[key] = {
                 "file": os.path.join(TEMPLATE_DIR, file),
-                "x": 750,
-                "y": 480,
+                "x": 400,
+                "y": 500,
                 "size": 70
             }
             print(f"Loaded template: {key}")
