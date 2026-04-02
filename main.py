@@ -35,52 +35,34 @@ os.makedirs(CERT_DIR, exist_ok=True)
 TEMPLATES = {
     "sert1": {  # 1-rasm (Yosh Ekologlar Tashakkurnoma)
         "file": f"{TEMPLATE_DIR}/sert1.png",
-        "x": 650,
-        "y": 520,
-        "size": 58,
-        "color": (0, 0, 0)
+        "x": 650, "y": 520, "size": 58, "color": (0, 0, 0)
     },
     "sert2": {  # 2-rasm (STEAM Academy Sertifikat)
         "file": f"{TEMPLATE_DIR}/sert2.png",
-        "x": 700,
-        "y": 520,
-        "size": 52,
-        "color": (0, 51, 102)
+        "x": 700, "y": 520, "size": 52, "color": (0, 51, 102)
     },
     "sert3": {  # 3-rasm (OEP Sertifikat)
         "file": f"{TEMPLATE_DIR}/sert3.png",
-        "x": 650,
-        "y": 680,
-        "size": 55,
-        "color": (0, 80, 0)
+        "x": 650, "y": 680, "size": 55, "color": (0, 80, 0)
     },
     "sert4": {  # 4-rasm (OEP Tashakkurnoma)
         "file": f"{TEMPLATE_DIR}/sert4.png",
-        "x": 650,
-        "y": 620,
-        "size": 62,
-        "color": (0, 100, 0)
+        "x": 650, "y": 620, "size": 62, "color": (0, 100, 0)
     },
     "sert5": {  # 5-rasm (Toshkent Yosh Ekologlar)
         "file": f"{TEMPLATE_DIR}/sert5.png",
-        "x": 650,
-        "y": 720,
-        "size": 60,
-        "color": (0, 70, 0)
+        "x": 650, "y": 720, "size": 60, "color": (0, 70, 0)
     },
     "sert6": {  # 6-rasm (Global Vibe Forum)
         "file": f"{TEMPLATE_DIR}/sert6.png",
-        "x": 850,
-        "y": 480,
-        "size": 55,
-        "color": (0, 0, 0)
+        "x": 850, "y": 480, "size": 55, "color": (0, 0, 0)
     }
 }
 
 # ================== STATE ==================
 class Form(StatesGroup):
     name = State()
-    template_key = State()   # Tanlangan sertifikat turini saqlash uchun
+    template_key = State()   # qaysi sertifikat tanlanganini saqlaydi
 
 # ================== SERTIFIKAT GENERATSIYA ==================
 def generate_certificate(name: str, template_key: str) -> str:
@@ -93,19 +75,17 @@ def generate_certificate(name: str, template_key: str) -> str:
 
     safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
 
-    font_path = "data/font.ttf"   # Bu yerga yaxshi bold shrift qo'ying
+    font_path = "data/font.ttf"
 
     font_size = config.get("size", 60)
     color = config.get("color", (0, 0, 0))
 
-    # Shriftni yuklash
     try:
         font = ImageFont.truetype(font_path, font_size)
     except Exception:
         logging.warning(f"Font topilmadi: {font_path}. Default ishlatilmoqda.")
         font = ImageFont.load_default()
 
-    # Avtomatik shrift o'lchamini moslashtirish
     while font_size > 30:
         bbox = draw.textbbox((0, 0), safe_name, font=font)
         text_width = bbox[2] - bbox[0]
@@ -117,7 +97,6 @@ def generate_certificate(name: str, template_key: str) -> str:
         except Exception:
             font = ImageFont.load_default()
 
-    # Markazlashtirilgan yozish
     draw.text(
         (config["x"], config["y"]),
         safe_name,
@@ -131,37 +110,13 @@ def generate_certificate(name: str, template_key: str) -> str:
     return output_path
 
 
-# ================== YORDAMCHI: OBUna TEKSHIRISH ==================
-async def check_subscription(user_id: int) -> bool:
-    for channel in TELEGRAM_CHANNELS:
-        try:
-            member = await bot.get_chat_member(channel, user_id)
-            if member.status in ["left", "kicked"]:
-                return False
-        except Exception:
-            return False
-    return True
-
-
-# ================== START ==================
+# ================== START (Sizning asl kodingizga yaqin) ==================
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
-    if not await check_subscription(message.from_user.id):
-        keyboard = InlineKeyboardMarkup(row_width=1)
-        for ch in TELEGRAM_CHANNELS:
-            keyboard.add(InlineKeyboardButton("📢 Obuna bo‘lish", url=f"https://t.me/{ch[1:]}"))
-        
-        await message.answer(
-            "❗ Botdan foydalanish uchun avval quyidagi kanallarga obuna bo‘ling:",
-            reply_markup=keyboard
-        )
-        return
-
-    # Sertifikat tanlash menyusi
-    kb = InlineKeyboardMarkup(row_width=2)
-    for key in TEMPLATES.keys():
-        btn_text = f"🏆 Sertifikat {key.replace('sert', '')}"
-        kb.add(InlineKeyboardButton(btn_text, callback_data=f"cert_{key}"))
+    kb = InlineKeyboardMarkup(row_width=1)
+    for key in sorted(TEMPLATES.keys()):   # tartib bilan chiqishi uchun
+        num = key.replace("sert", "")
+        kb.add(InlineKeyboardButton(f"🏆 Sertifikat {num}", callback_data=f"cert_{key}"))
 
     await message.answer(
         "👋 Salom!\n\n"
@@ -171,10 +126,14 @@ async def cmd_start(message: types.Message):
     )
 
 
-# ================== CALLBACK - SERTIFIKAT TANLASH ==================
+# ================== SERTIFIKAT TANLASH ==================
 @dp.callback_query_handler(lambda c: c.data.startswith("cert_"))
 async def process_cert_choice(callback: types.CallbackQuery, state: FSMContext):
     template_key = callback.data.replace("cert_", "")
+
+    if template_key not in TEMPLATES:
+        await callback.answer("❌ Noto‘g‘ri tanlov!", show_alert=True)
+        return
 
     await state.update_data(template_key=template_key)
     await Form.name.set()
@@ -183,43 +142,37 @@ async def process_cert_choice(callback: types.CallbackQuery, state: FSMContext):
         "✍️ Iltimos, to‘liq ismingizni kiriting:\n"
         "(Masalan: Anvarbek Xabibullayev)"
     )
-    await callback.answer()
 
 
-# ================== ISM QABUL QILISH VA SERTIFIKAT YUBORISH ==================
+# ================== ISM QABUL QILISH ==================
 @dp.message_handler(state=Form.name)
 async def get_name(message: types.Message, state: FSMContext):
-    user_data = await state.get_data()
-    template_key = user_data.get("template_key")
-
-    if not template_key:
-        await message.answer("❌ Xatolik yuz berdi. Qaytadan /start buyrug‘ini bosing.")
-        await state.finish()
-        return
+    data = await state.get_data()
+    template_key = data.get("template_key")
 
     name = message.text.strip()
 
     try:
-        await message.answer("⏳ Sertifikatingiz tayyorlanmoqda, biroz kuting...")
+        await message.answer("⏳ Sertifikatingiz tayyorlanmoqda...")
 
         cert_path = generate_certificate(name, template_key)
 
         with open(cert_path, "rb") as photo:
             await bot.send_photo(
-                message.chat.id,
-                photo,
-                caption=f"✅ Sertifikat muvaffaqiyatli tayyorlandi!\n\n"
+                chat_id=message.chat.id,
+                photo=photo,
+                caption=f"✅ Sertifikat tayyor!\n\n"
                         f"👤 Ism: <b>{name}</b>\n"
-                        f"📜 Tur: {template_key}"
+                        f"📜 Sertifikat: {template_key}"
             )
     except Exception as e:
-        logging.error(f"Sertifikat yaratishda xatolik: {e}")
-        await message.answer("❌ Sertifikat yaratishda xatolik yuz berdi. Keyinroq urinib ko‘ring.")
+        logging.error(f"Xatolik: {e}")
+        await message.answer("❌ Sertifikat yaratishda xatolik yuz berdi.")
     finally:
         await state.finish()
 
 
-# ================== ADMIN BUYRUQLARI ==================
+# ================== ADMIN BUYRUQLARI (sizning asl kodingiz) ==================
 @dp.message_handler(commands=['addtemplate'], user_id=ADMIN_ID)
 async def add_template(msg: types.Message):
     if not msg.reply_to_message or not msg.reply_to_message.photo:
@@ -242,7 +195,8 @@ async def add_template(msg: types.Message):
     }
 
     await msg.answer(f"✅ {template_key} qo‘shildi!\n"
-                     f"Position o‘zgartirish: /setpos {template_key} x y size")
+                     f"Position o‘zgartirish: /setpos {template_key} x y size\n"
+                     f"Masalan: /setpos {template_key} 650 520 58")
 
 
 @dp.message_handler(commands=['setpos'], user_id=ADMIN_ID)
@@ -275,6 +229,6 @@ if __name__ == "__main__":
                 print(f"✅ Avtomatik yuklandi: {key}")
 
     if not TEMPLATES:
-        print("⚠️ Hech qanday template topilmadi. Admin /addtemplate bilan qo'shsin.")
+        print("⚠️ Hech qanday template topilmadi.")
 
     executor.start_polling(dp, skip_updates=True)
