@@ -31,8 +31,8 @@ os.makedirs(TEMPLATE_DIR, exist_ok=True)
 os.makedirs(CERT_DIR, exist_ok=True)
 
 TEMPLATES = {
-    "template1": {"file": f"{TEMPLATE_DIR}/template1.png", "x": 380, "y": 560, "size": 65, "color": (0, 0, 0)},
-    "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 700, "y": 520, "size": 52, "color": (0, 51, 102)},
+    "template1": {"file": f"{TEMPLATE_DIR}/template1.png", "x": 380, "y": 530, "size": 70, "color": (0, 0, 0)},
+    "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 400, "y": 520, "size": 52, "color": (0, 51, 102)},
     "template3": {"file": f"{TEMPLATE_DIR}/template3.png", "x": 650, "y": 680, "size": 55, "color": (0, 80, 0)},
     "template4": {"file": f"{TEMPLATE_DIR}/template4.png", "x": 650, "y": 620, "size": 62, "color": (0, 100, 0)},
     "template5": {"file": f"{TEMPLATE_DIR}/template5.png", "x": 650, "y": 720, "size": 60, "color": (0, 70, 0)},
