@@ -31,7 +31,7 @@ CERT_DIR = "data/certificates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 os.makedirs(CERT_DIR, exist_ok=True)
 
-# ================== TEMPLATES (Sizning rasm nomlaringizga moslashtirildi) ==================
+# ================== TEMPLATES ==================
 TEMPLATES = {
     "template1": {"file": f"{TEMPLATE_DIR}/template1.png", "x": 650, "y": 520, "size": 58, "color": (0, 0, 0)},
     "template2": {"file": f"{TEMPLATE_DIR}/template2.png", "x": 700, "y": 520, "size": 52, "color": (0, 51, 102)},
@@ -51,7 +51,7 @@ def generate_certificate(name: str, template_key: str) -> str:
             raise Exception(f"Template {template_key} topilmadi")
 
         config = TEMPLATES[template_key]
-        
+       
         if not os.path.exists(config["file"]):
             raise Exception(f"Rasm topilmadi: {config['file']}")
 
@@ -91,7 +91,7 @@ def generate_certificate(name: str, template_key: str) -> str:
         raise
 
 
-# ================== OBUna TEKSHIRISH ==================
+# ================== FAQAT TELEGRAM OBUna TEKSHIRISH ==================
 async def check_subscription(user_id: int) -> bool:
     for channel in TELEGRAM_CHANNELS:
         try:
@@ -108,30 +108,45 @@ async def check_subscription(user_id: int) -> bool:
 async def cmd_start(message: types.Message):
     if not await check_subscription(message.from_user.id):
         kb = InlineKeyboardMarkup(row_width=1)
+        
+        # Telegram kanallar
         for ch in TELEGRAM_CHANNELS:
             kb.add(InlineKeyboardButton(f"📢 {ch}", url=f"https://t.me/{ch[1:]}"))
         
+        # Instagram sahifalari
         for link in INSTAGRAM_LINKS:
             kb.add(InlineKeyboardButton("📸 Instagram", url=link))
         
+        # Tekshirish tugmasi
         kb.add(InlineKeyboardButton("✅ Tekshirish", callback_data="check_sub"))
 
-        await message.answer("📢 **Obuna bo‘ling:**\nTelegram kanallar va Instagram sahifalariga obuna bo‘ling.", 
-                           reply_markup=kb)
+        await message.answer(
+            "📢 **Obuna bo‘ling:**\n\n"
+            "Botdan foydalanish uchun quyidagilarga obuna bo‘ling:",
+            reply_markup=kb
+        )
         return
 
+    # Obuna bo‘lsa darhol ism so‘raydi
     await message.answer("✍️ Iltimos, to‘liq ismingizni kiriting:")
     await Form.name.set()
 
 
-# ================== TEKSHIRISH ==================
+# ================== TEKSHIRISH TUGMASI ==================
 @dp.callback_query_handler(lambda c: c.data == "check_sub")
 async def check_sub_callback(callback: types.CallbackQuery, state: FSMContext):
     if await check_subscription(callback.from_user.id):
-        await callback.message.edit_text("✅ Obuna tasdiqlandi!\n\n✍️ Endi to‘liq ismingizni kiriting:")
+        await callback.message.edit_text(
+            "✅ Telegram kanallarga obuna tasdiqlandi!\n\n"
+            "✍️ Endi to‘liq ismingizni kiriting:"
+        )
         await Form.name.set()
     else:
-        await callback.answer("❌ Hali ham Telegram kanallarga obuna bo‘lmadingiz!", show_alert=True)
+        await callback.answer(
+            "❌ Hali ham Telegram kanallarga obuna bo‘lmadingiz!\n"
+            "Iltimos, avval kanallarga obuna bo‘ling va qayta \"Tekshirish\" tugmasini bosing.",
+            show_alert=True
+        )
     await callback.answer()
 
 
