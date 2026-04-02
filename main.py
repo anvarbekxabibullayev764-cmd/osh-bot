@@ -34,43 +34,43 @@ os.makedirs(CERT_DIR, exist_ok=True)
 TEMPLATES = {
     "sert1": {  # 1-rasm (Yosh Ekologlar Tashakkurnoma)
         "file": f"{TEMPLATE_DIR}/sert1.png",
-        "x": 650,      # markazga yaqin
-        "y": 520,
-        "size": 58,
+        "x": 380,      # markazga yaqin
+        "y": 560,
+        "size": 70,
         "color": (0, 0, 0)          # qora
     },
     "sert2": {  # 2-rasm (STEAM Academy Sertifikat)
         "file": f"{TEMPLATE_DIR}/sert2.png",
-        "x": 700,
+        "x": 420,
         "y": 520,
-        "size": 52,
+        "size": 70,
         "color": (0, 51, 102)       # quyuq ko'k
     },
     "sert3": {  # 3-rasm (OEP Sertifikat)
         "file": f"{TEMPLATE_DIR}/sert3.png",
-        "x": 650,
-        "y": 680,
-        "size": 55,
+        "x": 350,
+        "y": 560,
+        "size": 70,
         "color": (0, 80, 0)
     },
     "sert4": {  # 4-rasm (OEP Tashakkurnoma)
         "file": f"{TEMPLATE_DIR}/sert4.png",
-        "x": 650,
-        "y": 620,
-        "size": 62,
+        "x": 420,
+        "y": 520,
+        "size": 70,
         "color": (0, 100, 0)
     },
     "sert5": {  # 5-rasm (Toshkent Yosh Ekologlar)
         "file": f"{TEMPLATE_DIR}/sert5.png",
-        "x": 650,
-        "y": 720,
+        "x": 420,
+        "y": 520,
         "size": 60,
         "color": (0, 70, 0)
     },
     "sert6": {  # 6-rasm (Global Vibe Forum)
         "file": f"{TEMPLATE_DIR}/sert6.png",
-        "x": 850,      # inglizcha sertifikat kengroq
-        "y": 480,
+        "x": 400,      # inglizcha sertifikat kengroq
+        "y": 330,
         "size": 55,
         "color": (0, 0, 0)
     }
