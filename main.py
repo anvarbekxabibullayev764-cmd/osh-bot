@@ -27,51 +27,50 @@ INSTAGRAM_LINKS = [
 
 TEMPLATE_DIR = "data/templates"
 CERT_DIR = "data/certificates"
-
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 os.makedirs(CERT_DIR, exist_ok=True)
 
 # ================== HAR BIR TEMPLATE UCHUN ANIQ SOZLAMALAR ==================
 TEMPLATES = {
-    "sert1": {  # Yosh Ekologlar Tashakkurnoma
+    "sert1": {  # 1-rasm (Yosh Ekologlar Tashakkurnoma)
         "file": f"{TEMPLATE_DIR}/sert1.png",
-        "x": 380,
-        "y": 560,
-        "size": 70,
-        "color": (0, 0, 0)
-    },
-    "sert2": {  # STEAM Academy Sertifikat
-        "file": f"{TEMPLATE_DIR}/sert2.png",
-        "x": 420,
+        "x": 650,      # markazga yaqin
         "y": 520,
-        "size": 70,
-        "color": (0, 51, 102)
+        "size": 58,
+        "color": (0, 0, 0)          # qora
     },
-    "sert3": {  # OEP Sertifikat
+    "sert2": {  # 2-rasm (STEAM Academy Sertifikat)
+        "file": f"{TEMPLATE_DIR}/sert2.png",
+        "x": 700,
+        "y": 520,
+        "size": 52,
+        "color": (0, 51, 102)       # quyuq ko'k
+    },
+    "sert3": {  # 3-rasm (OEP Sertifikat)
         "file": f"{TEMPLATE_DIR}/sert3.png",
-        "x": 350,
-        "y": 560,
-        "size": 70,
+        "x": 650,
+        "y": 680,
+        "size": 55,
         "color": (0, 80, 0)
     },
-    "sert4": {  # OEP Tashakkurnoma
+    "sert4": {  # 4-rasm (OEP Tashakkurnoma)
         "file": f"{TEMPLATE_DIR}/sert4.png",
-        "x": 420,
-        "y": 520,
-        "size": 70,
+        "x": 650,
+        "y": 620,
+        "size": 62,
         "color": (0, 100, 0)
     },
-    "sert5": {  # Toshkent Yosh Ekologlar
+    "sert5": {  # 5-rasm (Toshkent Yosh Ekologlar)
         "file": f"{TEMPLATE_DIR}/sert5.png",
-        "x": 420,
-        "y": 520,
+        "x": 650,
+        "y": 720,
         "size": 60,
         "color": (0, 70, 0)
     },
-    "sert6": {  # Global Vibe Forum
+    "sert6": {  # 6-rasm (Global Vibe Forum)
         "file": f"{TEMPLATE_DIR}/sert6.png",
-        "x": 400,
-        "y": 330,
+        "x": 850,      # inglizcha sertifikat kengroq
+        "y": 480,
         "size": 55,
         "color": (0, 0, 0)
     }
@@ -81,7 +80,7 @@ TEMPLATES = {
 class Form(StatesGroup):
     name = State()
 
-# ================== SERTIFIKAT GENERATSIYA ==================
+# ================== SERTIFIKAT GENERATSIYA (YANGILANGAN) ==================
 def generate_certificate(name: str, template_key: str) -> str:
     if template_key not in TEMPLATES:
         raise Exception(f"Template {template_key} topilmadi")
@@ -92,44 +91,40 @@ def generate_certificate(name: str, template_key: str) -> str:
 
     safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
 
-    font_path = "data/font.ttf"   # Bu yerga o'zingizning shriftingizni qo'ying
+    font_path = "data/font.ttf"   # Bu yerga yaxshi bold shrift qo'ying (Montserrat-Bold.ttf yoki Arial-Bold)
     font_size = config.get("size", 60)
     color = config.get("color", (0, 0, 0))
 
-    # Shriftni yuklash
+    # Shriftni yuklash (topilmasa default)
     try:
         font = ImageFont.truetype(font_path, font_size)
-    except Exception:
+    except:
         logging.warning(f"Font topilmadi: {font_path}. Default ishlatilmoqda.")
         font = ImageFont.load_default()
 
-    # Avtomatik shrift o'lchamini moslashtirish
+    # Avtomatik shrift o'lchamini moslashtirish (juda uzun ism bo'lsa kichraytiradi)
     while font_size > 30:
         bbox = draw.textbbox((0, 0), safe_name, font=font)
         text_width = bbox[2] - bbox[0]
-        if text_width < img.size[0] - 200:
+        if text_width < img.size[0] - 200:   # chetidan 100px bo'sh joy
             break
         font_size -= 3
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except Exception:
-            font = ImageFont.load_default()
+        font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
 
-    # Matnni markazlashtirib yozish
+    # Markazlashtirilgan yozish (anchor="mm")
     draw.text(
         (config["x"], config["y"]),
         safe_name,
         fill=color,
         font=font,
-        anchor="mm"
+        anchor="mm"          # muhim! markazlashtirish
     )
 
-    output_path = f"{CERT_DIR}/{safe_name.replace(' ', '*')}*{template_key}.jpg"
+    output_path = f"{CERT_DIR}/{safe_name.replace(' ', '_')}_{template_key}.jpg"
     img.save(output_path, optimize=True, quality=92)
     return output_path
 
-
-# ================== ADMIN: TEMPLATE QO'SHISH ==================
+# ================== ADMIN: TEMPLATE YUKLASH (o'zgarmadi) ==================
 @dp.message_handler(commands=['addtemplate'], user_id=ADMIN_ID)
 async def add_template(msg: types.Message):
     if not msg.reply_to_message or not msg.reply_to_message.photo:
@@ -155,32 +150,25 @@ async def add_template(msg: types.Message):
                      f"Position o‘zgartirish: /setpos {template_key} x y size\n"
                      f"Masalan: /setpos {template_key} 650 520 58")
 
-
 # ================== POSITION O'ZGARTIRISH ==================
 @dp.message_handler(commands=['setpos'], user_id=ADMIN_ID)
 async def set_position(msg: types.Message):
     try:
         _, key, x, y, size = msg.text.split()
         x, y, size = int(x), int(y), int(size)
-
         if key not in TEMPLATES:
             await msg.answer("❌ Bunday template yo‘q!")
             return
-
         TEMPLATES[key].update({"x": x, "y": y, "size": size})
         await msg.answer(f"✅ {key} yangilandi:\nX: {x} | Y: {y} | Size: {size}")
-    except Exception:
+    except:
         await msg.answer("❌ Format: /setpos sert1 650 520 58")
 
-
-# ================== QOLGAN KOD (start, handlerlar va h.k.) ==================
-# Bu yerda sizning oldingi start, callback, get_name va boshqa handlerlaringiz qoladi.
-# Agar ularni yuborsangiz, to‘liq qo‘shib beraman.
-
+# ================== QOLGAN KOD (o'zgarmadi) ==================
+# ... (start, callback handlerlar, get_name va boshqalar o'zgarmay qoladi)
 
 # ================== BOTNI ISHGA TUSHIRISH ==================
 if __name__ == "__main__":
-    # Mavjud template larni avtomatik yuklash
     for file in os.listdir(TEMPLATE_DIR):
         if file.endswith((".png", ".jpg", ".jpeg")):
             key = file.split('.')[0]
