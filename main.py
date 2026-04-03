@@ -52,7 +52,7 @@ def generate_certificate(name: str, template_key: str) -> str:
         safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
         
         font_path = "data/font.ttf"
-        font_size = config.get("size", 100 )      # Bu yerda sizning kattaligingiz
+        font_size = config.get("size", 60 )      # Bu yerda sizning kattaligingiz
         color = config.get("color", (0, 0, 0))
 
         # Yangi qism — bu yerda size avtomatik kichraymaydi
