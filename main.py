@@ -46,57 +46,41 @@ class Form(StatesGroup):
 def generate_certificate(name: str, template_key: str) -> str:
     try:
         config = TEMPLATES[template_key]
-
-        if not os.path.exists(config["file"]):
-            raise Exception(f"Rasm topilmadi: {config['file']}")
-
         img = Image.open(config["file"]).convert("RGB")
         draw = ImageDraw.Draw(img)
 
-        # Faqat harf va probel qoldiramiz
-        safe_name = "".join(c for c in name if c.isalnum() or c == " ")[:50]
-
+        safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
+        
         font_path = "data/font.ttf"
-        if not os.path.exists(font_path):
-            raise Exception("❌ font.ttf topilmadi!")
+        font_size = config.get("size", 60)      # Bu yerda sizning kattaligingiz
+        color = config.get("color", (0, 0, 0))
 
-        desired_size = config.get("size", 100)
-        max_width = img.size[0] - 40   # OLDIN 100 edi → endi 40
+        # Yangi qism — bu yerda size avtomatik kichraymaydi
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
 
-        font_size = desired_size
-        font = ImageFont.truetype(font_path, font_size)
+        # Faqat juda uzun bo'lsa kichraytiradi
+        max_width = img.size[0] - 120
 
-        # 🔥 FAOL AUTO-SIZE (faqat kerak bo‘lsa kichrayadi)
-        bbox = draw.textbbox((0, 0), safe_name, font=font)
-        text_width = bbox[2] - bbox[0]
+        while font_size > 50:                    # Minimal 50 pixel
+            bbox = draw.textbbox((0, 0), safe_name, font=font)
+            if (bbox[2] - bbox[0]) <= max_width:
+                break
+            
+            font_size -= 8
+            font = ImageFont.truetype(font_path, font_size)
 
-        if text_width > max_width:
-            while font_size > 20:
-                font_size -= 2   # OLDIN 5 edi → endi yumshoq kamayadi
-                font = ImageFont.truetype(font_path, font_size)
-
-                bbox = draw.textbbox((0, 0), safe_name, font=font)
-                text_width = bbox[2] - bbox[0]
-
-                if text_width <= max_width:
-                    break
-
-        # MARKAZGA JOYLASH
-        draw.text(
-            (config["x"], config["y"]),
-            safe_name,
-            fill=config.get("color", (0, 0, 0)),
-            font=font,
-            anchor="mm"
-        )
+        # Yozuvni chizish
+        draw.text((config["x"], config["y"]), safe_name, fill=color, font=font, anchor="mm")
 
         output_path = f"{CERT_DIR}/{safe_name.replace(' ', '_')}_{template_key}.jpg"
-        img.save(output_path, quality=95)
-
+        img.save(output_path, optimize=True, quality=92)
         return output_path
 
     except Exception as e:
-        logging.error(e)
+        logging.error(f"{template_key} xatosi: {e}")
         raise
 
 async def check_telegram_subscription(user_id: int) -> bool:
