@@ -54,33 +54,52 @@ def generate_certificate(name: str, template_key: str) -> str:
 
         safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
         font_path = "data/font.ttf"
-        font_size = config.get("size", 60)
+
+        # Yangi yondashuv
+        desired_size = config.get("size", 60)      # Siz TEMPLATES da bergan size
+        max_width = img.size[0] - 100              # Rasm kengligidan biroz kamroq (chegara uchun)
         color = config.get("color", (0, 0, 0))
 
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except Exception:
-            font = ImageFont.load_default()
+        font_size = desired_size
+        font = None
 
-        while font_size > 30:
-            bbox = draw.textbbox((0, 0), safe_name, font=font)
-            if (bbox[2] - bbox[0]) < img.size[0]+100:
-                break
-            font_size -= 3
+        # 1. Avval kattaroq size bilan sinab ko‘ramiz
+        while font_size > 20:
             try:
                 font = ImageFont.truetype(font_path, font_size)
             except:
                 font = ImageFont.load_default()
+                break
 
-        draw.text((config["x"], config["y"]), safe_name, fill=color, font=font, anchor="mm")
+            bbox = draw.textbbox((0, 0), safe_name, font=font)
+            text_width = bbox[2] - bbox[0]
+
+            if text_width <= max_width:
+                break  # Mos keldi, chiqamiz
+
+            font_size -= 5  # Har safar 5 ga kichraytiramiz
+
+        # Agar juda uzun bo‘lsa va 20 dan ham kichik bo‘lsa, majburan 20 da qoldiramiz
+        if font is None or font_size <= 20:
+            font_size = 20
+            font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
+
+        # Matnni joylashtirish
+        draw.text(
+            (config["x"], config["y"]), 
+            safe_name, 
+            fill=color, 
+            font=font, 
+            anchor="mm"
+        )
 
         output_path = f"{CERT_DIR}/{safe_name.replace(' ', '_')}_{template_key}.jpg"
         img.save(output_path, optimize=True, quality=92)
         return output_path
+
     except Exception as e:
         logging.error(f"{template_key} xatosi: {e}")
         raise
-
 
 async def check_telegram_subscription(user_id: int) -> bool:
     for channel in TELEGRAM_CHANNELS:
