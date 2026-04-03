@@ -64,7 +64,7 @@ def generate_certificate(name: str, template_key: str) -> str:
 
         while font_size > 30:
             bbox = draw.textbbox((0, 0), safe_name, font=font)
-            if (bbox[2] - bbox[0]) < img.size[0] - 200:
+            if (bbox[2] - bbox[0]) < img.size[0]:
                 break
             font_size -= 3
             try:
