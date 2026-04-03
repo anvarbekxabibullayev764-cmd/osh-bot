@@ -56,10 +56,10 @@ def generate_certificate(name: str, template_key: str) -> str:
         color = config.get("color", (0, 0, 0))
 
         # Yangi qism — bu yerda size avtomatik kichraymaydi
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except:
-            font = ImageFont.load_default()
+        font_path = "data/font.ttf"
+font_size = config["size"]
+
+font = ImageFont.truetype(font_path, font_size)
 
         # Faqat juda uzun bo'lsa kichraytiradi
         max_width = img.size[0] - 120
