@@ -62,7 +62,7 @@ def generate_certificate(name: str, template_key: str) -> str:
             font = ImageFont.load_default()
 
         # Faqat juda uzun bo'lsa kichraytiradi
-        max_width = img.size[0] - 120
+        max_width = img.size[0] - 20
 
         while font_size > 50:                    # Minimal 50 pixel
             bbox = draw.textbbox((0, 0), safe_name, font=font)
