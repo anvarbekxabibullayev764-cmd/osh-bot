@@ -64,14 +64,24 @@ def generate_certificate(name: str, template_key: str) -> str:
         # Faqat juda uzun bo'lsa kichraytiradi
         max_width = img.size[0] - 20
 
-        while font_size > 50:                    # Minimal 50 pixel
-            bbox = draw.textbbox((0, 0), safe_name, font=font)
-            if (bbox[2] - bbox[0]) <= max_width:
-                break
-            
-            font_size -= 8
-            font = ImageFont.truetype(font_path, font_size)
+font_path = "data/font.ttf"
+font_size = config.get("size", 160)   # KATTA QILING (masalan 160–200)
+color = config.get("color", (0, 0, 0))
 
+try:
+    font = ImageFont.truetype(font_path, font_size)
+except:
+    font = ImageFont.load_default()
+
+# MATNNI MARKAZGA TO‘G‘RILASH
+bbox = draw.textbbox((0, 0), safe_name, font=font)
+text_width = bbox[2] - bbox[0]
+
+x = config["x"]
+y = config["y"]
+
+# Agar markaz bo‘lsa:
+draw.text((x, y), safe_name, fill=color, font=font, anchor="mm")
         # Yozuvni chizish
         draw.text((config["x"], config["y"]), safe_name, fill=color, font=font, anchor="mm")
 
