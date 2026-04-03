@@ -46,59 +46,57 @@ class Form(StatesGroup):
 def generate_certificate(name: str, template_key: str) -> str:
     try:
         config = TEMPLATES[template_key]
+
         if not os.path.exists(config["file"]):
             raise Exception(f"Rasm topilmadi: {config['file']}")
 
         img = Image.open(config["file"]).convert("RGB")
         draw = ImageDraw.Draw(img)
 
-        safe_name = "".join(c for c in name if c.isalnum() or c in " -'")[:50]
-        font_path = "data/font.ttf"
+        # Faqat harf va probel qoldiramiz
+        safe_name = "".join(c for c in name if c.isalnum() or c == " ")[:50]
 
-        # Yangi yondashuv
-        desired_size = config.get("size", 60)      # Siz TEMPLATES da bergan size
-        max_width = img.size[0] - 100              # Rasm kengligidan biroz kamroq (chegara uchun)
-        color = config.get("color", (0, 0, 0))
+        font_path = "data/font.ttf"
+        if not os.path.exists(font_path):
+            raise Exception("❌ font.ttf topilmadi!")
+
+        desired_size = config.get("size", 100)
+        max_width = img.size[0] - 40   # OLDIN 100 edi → endi 40
 
         font_size = desired_size
-        font = None
+        font = ImageFont.truetype(font_path, font_size)
 
-        # 1. Avval kattaroq size bilan sinab ko‘ramiz
-        while font_size > 20:
-            try:
+        # 🔥 FAOL AUTO-SIZE (faqat kerak bo‘lsa kichrayadi)
+        bbox = draw.textbbox((0, 0), safe_name, font=font)
+        text_width = bbox[2] - bbox[0]
+
+        if text_width > max_width:
+            while font_size > 20:
+                font_size -= 2   # OLDIN 5 edi → endi yumshoq kamayadi
                 font = ImageFont.truetype(font_path, font_size)
-            except:
-                font = ImageFont.load_default()
-                break
 
-            bbox = draw.textbbox((0, 0), safe_name, font=font)
-            text_width = bbox[2] - bbox[0]
+                bbox = draw.textbbox((0, 0), safe_name, font=font)
+                text_width = bbox[2] - bbox[0]
 
-            if text_width <= max_width:
-                break  # Mos keldi, chiqamiz
+                if text_width <= max_width:
+                    break
 
-            font_size -= 5  # Har safar 5 ga kichraytiramiz
-
-        # Agar juda uzun bo‘lsa va 20 dan ham kichik bo‘lsa, majburan 20 da qoldiramiz
-        if font is None or font_size <= 20:
-            font_size = 20
-            font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
-
-        # Matnni joylashtirish
+        # MARKAZGA JOYLASH
         draw.text(
-            (config["x"], config["y"]), 
-            safe_name, 
-            fill=color, 
-            font=font, 
+            (config["x"], config["y"]),
+            safe_name,
+            fill=config.get("color", (0, 0, 0)),
+            font=font,
             anchor="mm"
         )
 
         output_path = f"{CERT_DIR}/{safe_name.replace(' ', '_')}_{template_key}.jpg"
-        img.save(output_path, optimize=True, quality=92)
+        img.save(output_path, quality=95)
+
         return output_path
 
     except Exception as e:
-        logging.error(f"{template_key} xatosi: {e}")
+        logging.error(e)
         raise
 
 async def check_telegram_subscription(user_id: int) -> bool:
